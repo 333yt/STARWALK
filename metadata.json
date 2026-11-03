@@ -1,0 +1,8 @@
+{
+  "name": "STAR WALK｜星途經紀養成所",
+  "description": "管理你的生活預算，陪伴偶像一步步閃耀舞台！結合記帳月曆、財務分析、經紀公司營運、通告解鎖與偶像養成互動的預算管理平台。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
