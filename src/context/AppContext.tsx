@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Theme,
   Account,
@@ -11,7 +11,8 @@ import {
   DailyMission,
   Achievement,
   CharacterProfile,
-  TicketStub
+  TicketStub,
+  AppStateData
 } from '../types';
 import {
   INITIAL_ACCOUNTS,
@@ -26,6 +27,13 @@ import {
   INITIAL_CHARACTER_PROFILE
 } from '../data/initialData';
 import { sound } from '../utils/sound';
+import { useAuth } from './AuthContext';
+import {
+  getCleanInitialUserState,
+  getDemoInitialUserState,
+  loadUserDataFromFirestore,
+  saveUserDataToFirestore
+} from '../services/userDataService';
 
 interface AppContextType {
   // Theme & Mode
@@ -37,6 +45,14 @@ interface AppContextType {
   toggleSound: () => void;
   isFirebaseModalOpen: boolean;
   setIsFirebaseModalOpen: (open: boolean) => void;
+
+  // Sync state
+  isSyncing: boolean;
+  syncError: string | null;
+  isCloudSynced: boolean;
+  showImportPrompt: boolean;
+  importGuestDataToAccount: () => Promise<void>;
+  dismissImportPrompt: () => void;
 
   // Selected date & month
   selectedDate: string; // YYYY-MM-DD
@@ -108,38 +124,60 @@ interface AppContextType {
   // Actions - Ticket Stubs & Concert Completion
   completeConcertWithStub: (concertId: string, stub: Omit<TicketStub, 'id' | 'concertId' | 'createdAt'>) => void;
 
-  // Reset demo data
+  // Demo & Reset
+  loadDemoDataForTesting: () => void;
+  resetToCleanState: () => void;
   resetAllDataToDefault: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_PREFIX = 'STAR_WALK_V2_';
+function getStoragePrefix(uid?: string | null): string {
+  return uid ? `STAR_WALK_USER_${uid}_` : 'STAR_WALK_GUEST_';
+}
 
-function loadFromStorage<T>(key: string, defaultValue: T): T {
+function loadScopedStorage<T>(prefix: string, key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(LOCAL_STORAGE_PREFIX + key);
+    const item = localStorage.getItem(prefix + key);
     return item ? JSON.parse(item) : defaultValue;
   } catch (e) {
-    console.error('Storage load error for', key, e);
+    console.error('Storage load error for', prefix + key, e);
     return defaultValue;
   }
 }
 
-function saveToStorage<T>(key: string, value: T): void {
+function saveScopedStorage<T>(prefix: string, key: string, value: T): void {
   try {
-    localStorage.setItem(LOCAL_STORAGE_PREFIX + key, JSON.stringify(value));
+    localStorage.setItem(prefix + key, JSON.stringify(value));
   } catch (e) {
-    console.error('Storage save error for', key, e);
+    console.error('Storage save error for', prefix + key, e);
   }
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Theme state
-  const [theme, setThemeState] = useState<Theme>(() => loadFromStorage<Theme>('THEME', 'starlight'));
+  const { user, isFirebaseReady } = useAuth();
+  const currentUid = user?.uid || null;
+  const storagePrefix = getStoragePrefix(currentUid);
+
+  // Theme state (global)
+  const [theme, setThemeState] = useState<Theme>(() => {
+    try {
+      const saved = localStorage.getItem('STAR_WALK_GLOBAL_THEME');
+      return (saved as Theme) || 'starlight';
+    } catch {
+      return 'starlight';
+    }
+  });
+
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+  const [showImportPrompt, setShowImportPrompt] = useState<boolean>(false);
 
   // Today Date & Active Month
   const todayStr = useMemo(() => {
@@ -153,34 +191,255 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [currentYearMonth, setCurrentYearMonth] = useState<string>(todayStr.substring(0, 7));
 
-  // Entities
-  const [accounts, setAccounts] = useState<Account[]>(() => loadFromStorage('ACCOUNTS', INITIAL_ACCOUNTS));
-  const [transactions, setTransactions] = useState<Transaction[]>(() => loadFromStorage('TRANSACTIONS', INITIAL_TRANSACTIONS));
-  const [monthlyBudgets, setMonthlyBudgets] = useState<Record<string, number>>(() =>
-    loadFromStorage('BUDGETS', { [INITIAL_MONTHLY_BUDGET.yearMonth]: INITIAL_MONTHLY_BUDGET.budgetLimit })
+  const defaultClean = getCleanInitialUserState(user?.displayName || '星途經紀人');
+
+  // Entities initialized from storagePrefix
+  const [accounts, setAccounts] = useState<Account[]>(() =>
+    loadScopedStorage(storagePrefix, 'ACCOUNTS', defaultClean.accounts)
   );
-  const [concerts, setConcerts] = useState<ConcertGoal[]>(() => loadFromStorage('CONCERTS', INITIAL_CONCERTS));
-  const [concertTasks, setConcertTasks] = useState<ConcertTask[]>(() => loadFromStorage('CONCERT_TASKS', INITIAL_CONCERT_TASKS));
-  const [fundAllocations, setFundAllocations] = useState<FundAllocationRecord[]>(() => loadFromStorage('FUND_ALLOCATIONS', INITIAL_FUND_ALLOCATIONS));
-  const [collectibles, setCollectibles] = useState<Collectible[]>(() => loadFromStorage('COLLECTIBLES', INITIAL_COLLECTIBLES));
-  const [dailyMissions, setDailyMissions] = useState<DailyMission[]>(() => loadFromStorage('DAILY_MISSIONS', INITIAL_DAILY_MISSIONS));
-  const [achievements, setAchievements] = useState<Achievement[]>(() => loadFromStorage('ACHIEVEMENTS', INITIAL_ACHIEVEMENTS));
-  const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(() => loadFromStorage('CHARACTER', INITIAL_CHARACTER_PROFILE));
+  const [transactions, setTransactions] = useState<Transaction[]>(() =>
+    loadScopedStorage(storagePrefix, 'TRANSACTIONS', defaultClean.transactions)
+  );
+  const [monthlyBudgets, setMonthlyBudgets] = useState<Record<string, number>>(() =>
+    loadScopedStorage(storagePrefix, 'BUDGETS', defaultClean.monthlyBudgets)
+  );
+  const [concerts, setConcerts] = useState<ConcertGoal[]>(() =>
+    loadScopedStorage(storagePrefix, 'CONCERTS', defaultClean.concerts)
+  );
+  const [concertTasks, setConcertTasks] = useState<ConcertTask[]>(() =>
+    loadScopedStorage(storagePrefix, 'CONCERT_TASKS', defaultClean.concertTasks)
+  );
+  const [fundAllocations, setFundAllocations] = useState<FundAllocationRecord[]>(() =>
+    loadScopedStorage(storagePrefix, 'FUND_ALLOCATIONS', defaultClean.fundAllocations)
+  );
+  const [collectibles, setCollectibles] = useState<Collectible[]>(() =>
+    loadScopedStorage(storagePrefix, 'COLLECTIBLES', defaultClean.collectibles)
+  );
+  const [dailyMissions, setDailyMissions] = useState<DailyMission[]>(() =>
+    loadScopedStorage(storagePrefix, 'DAILY_MISSIONS', defaultClean.dailyMissions)
+  );
+  const [achievements, setAchievements] = useState<Achievement[]>(() =>
+    loadScopedStorage(storagePrefix, 'ACHIEVEMENTS', defaultClean.achievements)
+  );
+  const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(() =>
+    loadScopedStorage(storagePrefix, 'CHARACTER', defaultClean.characterProfile)
+  );
 
-  // Persist to localStorage
-  useEffect(() => { saveToStorage('THEME', theme); }, [theme]);
-  useEffect(() => { saveToStorage('ACCOUNTS', accounts); }, [accounts]);
-  useEffect(() => { saveToStorage('TRANSACTIONS', transactions); }, [transactions]);
-  useEffect(() => { saveToStorage('BUDGETS', monthlyBudgets); }, [monthlyBudgets]);
-  useEffect(() => { saveToStorage('CONCERTS', concerts); }, [concerts]);
-  useEffect(() => { saveToStorage('CONCERT_TASKS', concertTasks); }, [concertTasks]);
-  useEffect(() => { saveToStorage('FUND_ALLOCATIONS', fundAllocations); }, [fundAllocations]);
-  useEffect(() => { saveToStorage('COLLECTIBLES', collectibles); }, [collectibles]);
-  useEffect(() => { saveToStorage('DAILY_MISSIONS', dailyMissions); }, [dailyMissions]);
-  useEffect(() => { saveToStorage('ACHIEVEMENTS', achievements); }, [achievements]);
-  useEffect(() => { saveToStorage('CHARACTER', characterProfile); }, [characterProfile]);
+  // Sync to local scoped storage whenever state changes
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'ACCOUNTS', accounts);
+  }, [storagePrefix, accounts]);
 
-  // Apply Theme class to documentElement
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'TRANSACTIONS', transactions);
+  }, [storagePrefix, transactions]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'BUDGETS', monthlyBudgets);
+  }, [storagePrefix, monthlyBudgets]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'CONCERTS', concerts);
+  }, [storagePrefix, concerts]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'CONCERT_TASKS', concertTasks);
+  }, [storagePrefix, concertTasks]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'FUND_ALLOCATIONS', fundAllocations);
+  }, [storagePrefix, fundAllocations]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'COLLECTIBLES', collectibles);
+  }, [storagePrefix, collectibles]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'DAILY_MISSIONS', dailyMissions);
+  }, [storagePrefix, dailyMissions]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'ACHIEVEMENTS', achievements);
+  }, [storagePrefix, achievements]);
+
+  useEffect(() => {
+    saveScopedStorage(storagePrefix, 'CHARACTER', characterProfile);
+  }, [storagePrefix, characterProfile]);
+
+  // Sync to Firestore helper
+  const syncToFirestore = useCallback(
+    async (overrideData?: Partial<AppStateData>) => {
+      if (!currentUid || !isFirebaseReady) return;
+      setIsSyncing(true);
+      setSyncError(null);
+      try {
+        const fullState: AppStateData = {
+          accounts,
+          transactions,
+          monthlyBudgets,
+          concerts,
+          concertTasks,
+          fundAllocations,
+          collectibles,
+          dailyMissions,
+          achievements,
+          characterProfile,
+          ...overrideData,
+          updatedAt: Date.now()
+        };
+        await saveUserDataToFirestore(currentUid, fullState);
+        setIsCloudSynced(true);
+      } catch (err: unknown) {
+        console.error('Firestore sync error:', err);
+        setSyncError(err instanceof Error ? err.message : '雲端資料同步發生錯誤');
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    [
+      currentUid,
+      isFirebaseReady,
+      accounts,
+      transactions,
+      monthlyBudgets,
+      concerts,
+      concertTasks,
+      fundAllocations,
+      collectibles,
+      dailyMissions,
+      achievements,
+      characterProfile
+    ]
+  );
+
+  // When auth user changes (Login / Logout / Switch user)
+  useEffect(() => {
+    let isCancelled = false;
+
+    const handleUserSwitch = async () => {
+      if (currentUid && isFirebaseReady) {
+        setIsSyncing(true);
+        setSyncError(null);
+        try {
+          const cloudData = await loadUserDataFromFirestore(currentUid);
+          if (isCancelled) return;
+
+          if (cloudData) {
+            // Existing cloud account data
+            setAccounts(cloudData.accounts || []);
+            setTransactions(cloudData.transactions || []);
+            setMonthlyBudgets(cloudData.monthlyBudgets || {});
+            setConcerts(cloudData.concerts || []);
+            setConcertTasks(cloudData.concertTasks || []);
+            setFundAllocations(cloudData.fundAllocations || []);
+            setCollectibles(cloudData.collectibles || []);
+            setDailyMissions(cloudData.dailyMissions || INITIAL_DAILY_MISSIONS);
+            setAchievements(cloudData.achievements || INITIAL_ACHIEVEMENTS);
+            setCharacterProfile(cloudData.characterProfile || INITIAL_CHARACTER_PROFILE);
+            setIsCloudSynced(true);
+            setShowImportPrompt(false);
+          } else {
+            // Brand new registered user account
+            // Check if there is guest demo data in localStorage
+            const guestTxs = loadScopedStorage('STAR_WALK_GUEST_', 'TRANSACTIONS', []);
+            if (guestTxs.length > 0) {
+              // Ask user if they wish to import
+              setShowImportPrompt(true);
+            }
+
+            // Start with clean initial user state as required by Req 11!
+            const cleanState = getCleanInitialUserState(user?.displayName || '星途經紀人');
+            setAccounts(cleanState.accounts);
+            setTransactions(cleanState.transactions);
+            setMonthlyBudgets(cleanState.monthlyBudgets);
+            setConcerts(cleanState.concerts);
+            setConcertTasks(cleanState.concertTasks);
+            setFundAllocations(cleanState.fundAllocations);
+            setCollectibles(cleanState.collectibles);
+            setDailyMissions(cleanState.dailyMissions);
+            setAchievements(cleanState.achievements);
+            setCharacterProfile(cleanState.characterProfile);
+
+            // Save clean state to Firestore
+            await saveUserDataToFirestore(currentUid, cleanState);
+            setIsCloudSynced(true);
+          }
+        } catch (err: unknown) {
+          if (!isCancelled) {
+            setSyncError('無法載入雲端資料，目前切換至本機暫存模式');
+          }
+        } finally {
+          if (!isCancelled) setIsSyncing(false);
+        }
+      } else if (!currentUid) {
+        // Logged out / Guest: load guest state (loads existing local state or default clean)
+        const guestData = getCleanInitialUserState('訪客經紀人');
+        setAccounts(loadScopedStorage('STAR_WALK_GUEST_', 'ACCOUNTS', guestData.accounts));
+        setTransactions(loadScopedStorage('STAR_WALK_GUEST_', 'TRANSACTIONS', guestData.transactions));
+        setMonthlyBudgets(loadScopedStorage('STAR_WALK_GUEST_', 'BUDGETS', guestData.monthlyBudgets));
+        setConcerts(loadScopedStorage('STAR_WALK_GUEST_', 'CONCERTS', guestData.concerts));
+        setConcertTasks(loadScopedStorage('STAR_WALK_GUEST_', 'CONCERT_TASKS', guestData.concertTasks));
+        setFundAllocations(loadScopedStorage('STAR_WALK_GUEST_', 'FUND_ALLOCATIONS', guestData.fundAllocations));
+        setCollectibles(loadScopedStorage('STAR_WALK_GUEST_', 'COLLECTIBLES', guestData.collectibles));
+        setDailyMissions(loadScopedStorage('STAR_WALK_GUEST_', 'DAILY_MISSIONS', guestData.dailyMissions));
+        setAchievements(loadScopedStorage('STAR_WALK_GUEST_', 'ACHIEVEMENTS', guestData.achievements));
+        setCharacterProfile(loadScopedStorage('STAR_WALK_GUEST_', 'CHARACTER', guestData.characterProfile));
+        setIsCloudSynced(false);
+        setShowImportPrompt(false);
+      }
+    };
+
+    handleUserSwitch();
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUid, isFirebaseReady]);
+
+  // Handle importing guest demo data to user account
+  const importGuestDataToAccount = async () => {
+    if (!currentUid) return;
+    const guestState: AppStateData = {
+      accounts: loadScopedStorage('STAR_WALK_GUEST_', 'ACCOUNTS', INITIAL_ACCOUNTS),
+      transactions: loadScopedStorage('STAR_WALK_GUEST_', 'TRANSACTIONS', INITIAL_TRANSACTIONS),
+      monthlyBudgets: loadScopedStorage('STAR_WALK_GUEST_', 'BUDGETS', { [INITIAL_MONTHLY_BUDGET.yearMonth]: INITIAL_MONTHLY_BUDGET.budgetLimit }),
+      concerts: loadScopedStorage('STAR_WALK_GUEST_', 'CONCERTS', INITIAL_CONCERTS),
+      concertTasks: loadScopedStorage('STAR_WALK_GUEST_', 'CONCERT_TASKS', INITIAL_CONCERT_TASKS),
+      fundAllocations: loadScopedStorage('STAR_WALK_GUEST_', 'FUND_ALLOCATIONS', INITIAL_FUND_ALLOCATIONS),
+      collectibles: loadScopedStorage('STAR_WALK_GUEST_', 'COLLECTIBLES', INITIAL_COLLECTIBLES),
+      dailyMissions: loadScopedStorage('STAR_WALK_GUEST_', 'DAILY_MISSIONS', INITIAL_DAILY_MISSIONS),
+      achievements: loadScopedStorage('STAR_WALK_GUEST_', 'ACHIEVEMENTS', INITIAL_ACHIEVEMENTS),
+      characterProfile: loadScopedStorage('STAR_WALK_GUEST_', 'CHARACTER', INITIAL_CHARACTER_PROFILE),
+      updatedAt: Date.now()
+    };
+
+    // Backup guest data locally before import
+    try {
+      localStorage.setItem('STAR_WALK_GUEST_BACKUP_' + Date.now(), JSON.stringify(guestState));
+    } catch (e) {
+      console.warn('Backup error', e);
+    }
+
+    setAccounts(guestState.accounts);
+    setTransactions(guestState.transactions);
+    setMonthlyBudgets(guestState.monthlyBudgets);
+    setConcerts(guestState.concerts);
+    setConcertTasks(guestState.concertTasks);
+    setFundAllocations(guestState.fundAllocations);
+    setCollectibles(guestState.collectibles);
+    setDailyMissions(guestState.dailyMissions);
+    setAchievements(guestState.achievements);
+    setCharacterProfile(guestState.characterProfile);
+
+    setShowImportPrompt(false);
+    await syncToFirestore(guestState);
+    sound.playSuccess();
+  };
+
+  const dismissImportPrompt = () => {
+    setShowImportPrompt(false);
+  };
+
+  // Theme application
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('theme-starlight', 'theme-pink', 'theme-midnight', 'dark');
@@ -191,6 +450,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       root.classList.add('theme-starlight');
     }
+    localStorage.setItem('STAR_WALK_GLOBAL_THEME', theme);
   }, [theme]);
 
   const setTheme = (t: Theme) => {
@@ -204,7 +464,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (sound.enabled) sound.playCoin();
   };
 
-  // Sound toggle sync
   useEffect(() => {
     sound.enabled = isSoundEnabled;
   }, [isSoundEnabled]);
@@ -215,10 +474,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [concerts]);
 
   const setPrimaryConcert = (id: string) => {
-    setConcerts(prev => prev.map(c => ({
+    const nextConcerts = concerts.map(c => ({
       ...c,
       isPrimary: c.id === id
-    })));
+    }));
+    setConcerts(nextConcerts);
+    syncToFirestore({ concerts: nextConcerts });
     sound.playSparkle();
   };
 
@@ -252,7 +513,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [monthTransactions]);
 
   const currentMonthBudgetLimit = useMemo(() => {
-    return monthlyBudgets[currentYearMonth] ?? 22000;
+    return monthlyBudgets[currentYearMonth] ?? 20000;
   }, [monthlyBudgets, currentYearMonth]);
 
   const monthBudgetRemaining = useMemo(() => {
@@ -266,7 +527,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Liquid assets & concert funds
   const totalLiquidAssets = useMemo(() => {
-    // Sum cash + bank + linepay, minus unpaid credit card
     return accounts.reduce((acc, account) => {
       if (account.type === 'credit_card') {
         return acc - account.balance;
@@ -301,11 +561,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         newLevel += 1;
       }
 
-      return {
+      const updated = {
         ...prev,
         xp: newXp,
         level: newLevel
       };
+      syncToFirestore({ characterProfile: updated });
+      return updated;
     });
   };
 
@@ -318,26 +580,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: Date.now()
     };
 
+    let nextCollectibles = collectibles;
+
     // Update account balances
-    setAccounts(prevAccounts =>
-      prevAccounts.map(acc => {
-        if (acc.id === txData.accountId) {
-          if (acc.type === 'credit_card') {
-            // Credit card: expense increases unpaid balance; income (e.g. paying bill) decreases it
-            return {
-              ...acc,
-              balance: txData.type === 'expense' ? acc.balance + txData.amount : Math.max(0, acc.balance - txData.amount)
-            };
-          } else {
-            return {
-              ...acc,
-              balance: txData.type === 'income' ? acc.balance + txData.amount : acc.balance - txData.amount
-            };
-          }
+    const nextAccounts = accounts.map(acc => {
+      if (acc.id === txData.accountId) {
+        if (acc.type === 'credit_card') {
+          return {
+            ...acc,
+            balance: txData.type === 'expense' ? acc.balance + txData.amount : Math.max(0, acc.balance - txData.amount)
+          };
+        } else {
+          return {
+            ...acc,
+            balance: txData.type === 'income' ? acc.balance + txData.amount : acc.balance - txData.amount
+          };
         }
-        return acc;
-      })
-    );
+      }
+      return acc;
+    });
 
     // If detailed idol item and marked syncToCollection
     if (txData.detailedItem && txData.detailedItem.syncToCollection) {
@@ -363,10 +624,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         note: txData.note,
         linkedTransactionId: newId
       };
-      setCollectibles(prev => [newCollectible, ...prev]);
+      nextCollectibles = [newCollectible, ...collectibles];
+      setCollectibles(nextCollectibles);
     }
 
-    setTransactions(prev => [newTx, ...prev]);
+    const nextTxs = [newTx, ...transactions];
+    setAccounts(nextAccounts);
+    setTransactions(nextTxs);
 
     // Check if daily record mission can be triggered
     const dailyMission = dailyMissions.find(m => m.type === 'daily_record' && !m.isCompleted);
@@ -374,19 +638,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completeDailyMission(dailyMission.id);
     }
 
+    syncToFirestore({
+      accounts: nextAccounts,
+      transactions: nextTxs,
+      collectibles: nextCollectibles
+    });
+
     sound.playCoin();
     return { success: true };
   };
 
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev =>
-      prev.map(tx => {
-        if (tx.id === id) {
-          return { ...tx, ...updates };
-        }
-        return tx;
-      })
-    );
+    const nextTxs = transactions.map(tx => (tx.id === id ? { ...tx, ...updates } : tx));
+    setTransactions(nextTxs);
+    syncToFirestore({ transactions: nextTxs });
     sound.playClick();
   };
 
@@ -395,40 +660,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!target) return;
 
     // Reverse account impact
-    setAccounts(prev =>
-      prev.map(acc => {
-        if (acc.id === target.accountId) {
-          if (acc.type === 'credit_card') {
-            return {
-              ...acc,
-              balance: target.type === 'expense' ? Math.max(0, acc.balance - target.amount) : acc.balance + target.amount
-            };
-          } else {
-            return {
-              ...acc,
-              balance: target.type === 'income' ? acc.balance - target.amount : acc.balance + target.amount
-            };
-          }
+    const nextAccounts = accounts.map(acc => {
+      if (acc.id === target.accountId) {
+        if (acc.type === 'credit_card') {
+          return {
+            ...acc,
+            balance: target.type === 'expense' ? Math.max(0, acc.balance - target.amount) : acc.balance + target.amount
+          };
+        } else {
+          return {
+            ...acc,
+            balance: target.type === 'income' ? acc.balance - target.amount : acc.balance + target.amount
+          };
         }
-        return acc;
-      })
-    );
+      }
+      return acc;
+    });
 
     // If linked collectible exists, remove linkage
+    let nextCollectibles = collectibles;
     if (target.detailedItem?.linkedCollectibleId) {
-      setCollectibles(prev => prev.filter(c => c.id !== target.detailedItem?.linkedCollectibleId));
+      nextCollectibles = collectibles.filter(c => c.id !== target.detailedItem?.linkedCollectibleId);
+      setCollectibles(nextCollectibles);
     }
 
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    const nextTxs = transactions.filter(t => t.id !== id);
+    setAccounts(nextAccounts);
+    setTransactions(nextTxs);
+
+    syncToFirestore({
+      accounts: nextAccounts,
+      transactions: nextTxs,
+      collectibles: nextCollectibles
+    });
+
     sound.playClick();
   };
 
   // Monthly Budget
   const setMonthlyBudgetLimit = (yearMonth: string, limit: number) => {
-    setMonthlyBudgets(prev => ({
-      ...prev,
+    const nextBudgets = {
+      ...monthlyBudgets,
       [yearMonth]: Math.max(0, limit)
-    }));
+    };
+    setMonthlyBudgets(nextBudgets);
+    syncToFirestore({ monthlyBudgets: nextBudgets });
     sound.playSuccess();
   };
 
@@ -442,9 +718,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'saving',
       isPrimary: concerts.length === 0
     };
-    setConcerts(prev => [...prev, newGoal]);
+    const nextConcerts = [...concerts, newGoal];
+    setConcerts(nextConcerts);
 
-    // Default template tasks
     const defaultTasks: ConcertTask[] = [
       { id: 'ct_' + Date.now() + '_1', concertId: newId, title: '確認售票時間與實名制規則', isCompleted: false, xpReward: 15 },
       { id: 'ct_' + Date.now() + '_2', concertId: newId, title: '順利搶到演唱會指定票種', isCompleted: false, xpReward: 25 },
@@ -452,23 +728,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { id: 'ct_' + Date.now() + '_4', concertId: newId, title: '預訂場館鄰近住宿地點', isCompleted: false, xpReward: 15 },
       { id: 'ct_' + Date.now() + '_5', concertId: newId, title: '檢查官方應援棒與備用電池', isCompleted: false, xpReward: 10 }
     ];
-    setConcertTasks(prev => [...prev, ...defaultTasks]);
+    const nextTasks = [...concertTasks, ...defaultTasks];
+    setConcertTasks(nextTasks);
+
+    syncToFirestore({ concerts: nextConcerts, concertTasks: nextTasks });
     sound.playSparkle();
   };
 
   const updateConcertGoal = (id: string, updates: Partial<ConcertGoal>) => {
-    setConcerts(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updates } : c))
-    );
+    const nextConcerts = concerts.map(c => (c.id === id ? { ...c, ...updates } : c));
+    setConcerts(nextConcerts);
+    syncToFirestore({ concerts: nextConcerts });
     sound.playClick();
   };
 
   const deleteConcertGoal = (id: string) => {
-    const target = concerts.find(c => c.id === id);
-    if (!target) return;
-    setConcerts(prev => prev.filter(c => c.id !== id));
-    setConcertTasks(prev => prev.filter(t => t.concertId !== id));
-    setFundAllocations(prev => prev.filter(f => f.concertId !== id));
+    const nextConcerts = concerts.filter(c => c.id !== id);
+    const nextTasks = concertTasks.filter(t => t.concertId !== id);
+    const nextFunds = fundAllocations.filter(f => f.concertId !== id);
+
+    setConcerts(nextConcerts);
+    setConcertTasks(nextTasks);
+    setFundAllocations(nextFunds);
+
+    syncToFirestore({
+      concerts: nextConcerts,
+      concertTasks: nextTasks,
+      fundAllocations: nextFunds
+    });
+
     sound.playClick();
   };
 
@@ -484,20 +772,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    setConcerts(prev =>
-      prev.map(c => {
-        if (c.id === concertId) {
-          const newAllocated = c.allocatedFund + amount;
-          const isTargetReached = newAllocated >= c.budgetPlan.total;
-          return {
-            ...c,
-            allocatedFund: newAllocated,
-            status: isTargetReached ? 'ready' : 'saving'
-          };
-        }
-        return c;
-      })
-    );
+    const nextConcerts = concerts.map(c => {
+      if (c.id === concertId) {
+        const newAllocated = c.allocatedFund + amount;
+        const isTargetReached = newAllocated >= c.budgetPlan.total;
+        return {
+          ...c,
+          allocatedFund: newAllocated,
+          status: (isTargetReached ? 'ready' : 'saving') as ConcertGoal['status']
+        };
+      }
+      return c;
+    });
 
     const record: FundAllocationRecord = {
       id: 'fa_' + Date.now(),
@@ -508,7 +794,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       note,
       createdAt: Date.now()
     };
-    setFundAllocations(prev => [record, ...prev]);
+    const nextFunds = [record, ...fundAllocations];
+
+    setConcerts(nextConcerts);
+    setFundAllocations(nextFunds);
+
+    syncToFirestore({
+      concerts: nextConcerts,
+      fundAllocations: nextFunds
+    });
 
     sound.playSuccess();
     return { success: true, message: `成功為目標分配 NT$ ${amount.toLocaleString()} 專款基金！` };
@@ -525,19 +819,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    setConcerts(prev =>
-      prev.map(c => {
-        if (c.id === concertId) {
-          const newAllocated = Math.max(0, c.allocatedFund - amount);
-          return {
-            ...c,
-            allocatedFund: newAllocated,
-            status: newAllocated >= c.budgetPlan.total ? 'ready' : 'saving'
-          };
-        }
-        return c;
-      })
-    );
+    const nextConcerts = concerts.map(c => {
+      if (c.id === concertId) {
+        const newAllocated = Math.max(0, c.allocatedFund - amount);
+        return {
+          ...c,
+          allocatedFund: newAllocated,
+          status: (newAllocated >= c.budgetPlan.total ? 'ready' : 'saving') as ConcertGoal['status']
+        };
+      }
+      return c;
+    });
 
     const record: FundAllocationRecord = {
       id: 'fa_' + Date.now(),
@@ -548,7 +840,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       note,
       createdAt: Date.now()
     };
-    setFundAllocations(prev => [record, ...prev]);
+    const nextFunds = [record, ...fundAllocations];
+
+    setConcerts(nextConcerts);
+    setFundAllocations(nextFunds);
+
+    syncToFirestore({
+      concerts: nextConcerts,
+      fundAllocations: nextFunds
+    });
 
     sound.playCoin();
     return { success: true, message: `已成功由演唱會基金轉回 NT$ ${amount.toLocaleString()} 至未分配資金池` };
@@ -556,18 +856,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Concert Tasks
   const toggleConcertTask = (taskId: string) => {
-    setConcertTasks(prev =>
-      prev.map(t => {
-        if (t.id === taskId) {
-          const nextState = !t.isCompleted;
-          if (nextState) {
-            awardXP(t.xpReward, `完成演唱會準備任務: ${t.title}`);
-          }
-          return { ...t, isCompleted: nextState };
+    const nextTasks = concertTasks.map(t => {
+      if (t.id === taskId) {
+        const nextState = !t.isCompleted;
+        if (nextState) {
+          awardXP(t.xpReward, `完成演唱會準備任務: ${t.title}`);
         }
-        return t;
-      })
-    );
+        return { ...t, isCompleted: nextState };
+      }
+      return t;
+    });
+    setConcertTasks(nextTasks);
+    syncToFirestore({ concertTasks: nextTasks });
     sound.playClick();
   };
 
@@ -579,31 +879,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isCompleted: false,
       xpReward
     };
-    setConcertTasks(prev => [...prev, newTask]);
+    const nextTasks = [...concertTasks, newTask];
+    setConcertTasks(nextTasks);
+    syncToFirestore({ concertTasks: nextTasks });
     sound.playSparkle();
   };
 
   const deleteConcertTask = (taskId: string) => {
-    setConcertTasks(prev => prev.filter(t => t.id !== taskId));
+    const nextTasks = concertTasks.filter(t => t.id !== taskId);
+    setConcertTasks(nextTasks);
+    syncToFirestore({ concertTasks: nextTasks });
     sound.playClick();
   };
 
   // Collectibles
   const addCollectible = (item: Omit<Collectible, 'id'>) => {
     const newId = 'col_' + Date.now();
-    setCollectibles(prev => [{ ...item, id: newId }, ...prev]);
+    const nextCollectibles = [{ ...item, id: newId }, ...collectibles];
+    setCollectibles(nextCollectibles);
+    syncToFirestore({ collectibles: nextCollectibles });
     sound.playSparkle();
   };
 
   const updateCollectible = (id: string, updates: Partial<Collectible>) => {
-    setCollectibles(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updates } : c))
-    );
+    const nextCollectibles = collectibles.map(c => (c.id === id ? { ...c, ...updates } : c));
+    setCollectibles(nextCollectibles);
+    syncToFirestore({ collectibles: nextCollectibles });
     sound.playClick();
   };
 
   const deleteCollectible = (id: string) => {
-    setCollectibles(prev => prev.filter(c => c.id !== id));
+    const nextCollectibles = collectibles.filter(c => c.id !== id);
+    setCollectibles(nextCollectibles);
+    syncToFirestore({ collectibles: nextCollectibles });
     sound.playClick();
   };
 
@@ -612,25 +920,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const mission = dailyMissions.find(m => m.id === missionId);
     if (!mission || mission.isCompleted) return;
 
-    setDailyMissions(prev =>
-      prev.map(m =>
-        m.id === missionId ? { ...m, isCompleted: true, completedDate: todayStr } : m
-      )
+    const nextMissions = dailyMissions.map(m =>
+      m.id === missionId ? { ...m, isCompleted: true, completedDate: todayStr } : m
     );
+    setDailyMissions(nextMissions);
     awardXP(mission.xp, `達成任務: ${mission.title}`);
+    syncToFirestore({ dailyMissions: nextMissions });
   };
 
   const updateCharacterProfile = (updates: Partial<CharacterProfile>) => {
-    setCharacterProfile(prev => ({ ...prev, ...updates }));
+    const nextProfile = { ...characterProfile, ...updates };
+    setCharacterProfile(nextProfile);
+    syncToFirestore({ characterProfile: nextProfile });
     sound.playSparkle();
   };
 
   const advanceAgencyStage = () => {
-    setCharacterProfile(prev => ({
-      ...prev,
-      agencyStageIndex: Math.min(5, prev.agencyStageIndex + 1),
-      agencyPoints: prev.agencyPoints + 200
-    }));
+    const nextProfile = {
+      ...characterProfile,
+      agencyStageIndex: Math.min(5, characterProfile.agencyStageIndex + 1),
+      agencyPoints: characterProfile.agencyPoints + 200
+    };
+    setCharacterProfile(nextProfile);
+    syncToFirestore({ characterProfile: nextProfile });
     sound.playSuccess();
   };
 
@@ -643,37 +955,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: todayStr
     };
 
-    setConcerts(prev =>
-      prev.map(c => {
-        if (c.id === concertId) {
-          return {
-            ...c,
-            status: 'completed',
-            completedAt: todayStr,
-            ticketStub: stub
-          };
-        }
-        return c;
-      })
-    );
+    const nextConcerts = concerts.map(c => {
+      if (c.id === concertId) {
+        return {
+          ...c,
+          status: 'completed' as ConcertGoal['status'],
+          completedAt: todayStr,
+          ticketStub: stub
+        };
+      }
+      return c;
+    });
 
+    setConcerts(nextConcerts);
     awardXP(50, '圓滿完成演唱會並生成珍藏紀念票根！');
+    syncToFirestore({ concerts: nextConcerts });
+    sound.playSuccess();
+  };
+
+  // Load demo data for developer/testing purposes
+  const loadDemoDataForTesting = () => {
+    const demo = getDemoInitialUserState();
+    setAccounts(demo.accounts);
+    setTransactions(demo.transactions);
+    setMonthlyBudgets(demo.monthlyBudgets);
+    setConcerts(demo.concerts);
+    setConcertTasks(demo.concertTasks);
+    setFundAllocations(demo.fundAllocations);
+    setCollectibles(demo.collectibles);
+    setDailyMissions(demo.dailyMissions);
+    setAchievements(demo.achievements);
+    setCharacterProfile(demo.characterProfile);
+
+    if (currentUid && isFirebaseReady) {
+      syncToFirestore(demo);
+    }
+    sound.playSuccess();
+  };
+
+  // Reset to clean state (0 concerts, 0 transactions, 0 collectibles)
+  const resetToCleanState = () => {
+    const clean = getCleanInitialUserState(user?.displayName || '星途經紀人');
+    setAccounts(clean.accounts);
+    setTransactions([]);
+    setMonthlyBudgets(clean.monthlyBudgets);
+    setConcerts([]);
+    setConcertTasks([]);
+    setFundAllocations([]);
+    setCollectibles([]);
+    setDailyMissions(clean.dailyMissions);
+    setAchievements(clean.achievements);
+    setCharacterProfile(clean.characterProfile);
+
+    if (currentUid && isFirebaseReady) {
+      syncToFirestore(clean);
+    }
     sound.playSuccess();
   };
 
   // Reset demo
   const resetAllDataToDefault = () => {
-    setAccounts(INITIAL_ACCOUNTS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setMonthlyBudgets({ [INITIAL_MONTHLY_BUDGET.yearMonth]: INITIAL_MONTHLY_BUDGET.budgetLimit });
-    setConcerts(INITIAL_CONCERTS);
-    setConcertTasks(INITIAL_CONCERT_TASKS);
-    setFundAllocations(INITIAL_FUND_ALLOCATIONS);
-    setCollectibles(INITIAL_COLLECTIBLES);
-    setDailyMissions(INITIAL_DAILY_MISSIONS);
-    setAchievements(INITIAL_ACHIEVEMENTS);
-    setCharacterProfile(INITIAL_CHARACTER_PROFILE);
-    sound.playSuccess();
+    resetToCleanState();
   };
 
   return (
@@ -687,6 +1029,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleSound,
         isFirebaseModalOpen,
         setIsFirebaseModalOpen,
+        isSyncing,
+        syncError,
+        isCloudSynced,
+        showImportPrompt,
+        importGuestDataToAccount,
+        dismissImportPrompt,
         selectedDate,
         setSelectedDate,
         currentYearMonth,
@@ -735,6 +1083,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCharacterProfile,
         advanceAgencyStage,
         completeConcertWithStub,
+        loadDemoDataForTesting,
+        resetToCleanState,
         resetAllDataToDefault
       }}
     >

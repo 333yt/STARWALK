@@ -119,6 +119,7 @@ export interface ConcertGoal {
   title: string;
   artist: string;
   date?: string; // YYYY-MM-DD
+  isDateTBA?: boolean; // 日期待公布
   country: string;
   city: string;
   venue: string;
@@ -145,6 +146,7 @@ export interface Collectible {
   id: string;
   name: string;
   photoUrl: string;
+  backPhotoUrl?: string; // 正面與背面實拍照片支援
   group: string;
   artist: string;
   member: string;
@@ -188,4 +190,27 @@ export interface CharacterProfile {
   unlockedOutfits: string[];
   agencyPoints: number; // Virtual idols agency currency
   agencyStageIndex: number; // 0 to 5
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string;
+  photoURL: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AppStateData {
+  accounts: Account[];
+  transactions: Transaction[];
+  monthlyBudgets: Record<string, number>;
+  concerts: ConcertGoal[];
+  concertTasks: ConcertTask[];
+  fundAllocations: FundAllocationRecord[];
+  collectibles: Collectible[];
+  dailyMissions: DailyMission[];
+  achievements: Achievement[];
+  characterProfile: CharacterProfile;
+  updatedAt?: number;
 }

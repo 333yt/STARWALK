@@ -55,10 +55,9 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
   const [amountStr, setAmountStr] = useState<string>('');
   const [note, setNote] = useState<string>('');
 
-  // Detailed fields
   const [itemName, setItemName] = useState<string>('');
-  const [groupName, setGroupName] = useState<string>('TWICE');
-  const [artistName, setArtistName] = useState<string>('TWICE');
+  const [groupName, setGroupName] = useState<string>('');
+  const [artistName, setArtistName] = useState<string>('');
   const [memberName, setMemberName] = useState<string>('');
   const [itemType, setItemType] = useState<string>('官方周邊');
   const [quantity, setQuantity] = useState<number>(1);
@@ -374,7 +373,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">商品名稱</label>
                   <input
                     type="text"
-                    placeholder="例如：CandyBong ∞ 手燈"
+                    placeholder="例如：紀念演唱會T恤、官方手燈、特典小卡"
                     value={itemName}
                     onChange={e => setItemName(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -384,7 +383,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">團體 / 藝人</label>
                   <input
                     type="text"
-                    placeholder="例如：TWICE / SEVENTEEN"
+                    placeholder="例如：五月天、Taylor Swift、周杰倫、TWICE"
                     value={groupName}
                     onChange={e => {
                       setGroupName(e.target.value);
@@ -400,7 +399,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">成員（可選）</label>
                   <input
                     type="text"
-                    placeholder="例如：全體、志效、淨漢"
+                    placeholder="例如：全體、阿信、泰勒絲"
                     value={memberName}
                     onChange={e => setMemberName(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -410,7 +409,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">購買管道 / 平台</label>
                   <input
                     type="text"
-                    placeholder="例如：JYP SHOP、五大唱片、社團"
+                    placeholder="例如：官方通路、唱片行、現場、社團"
                     value={platform}
                     onChange={e => setPlatform(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
