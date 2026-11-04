@@ -100,6 +100,7 @@ interface AppContextType {
   addConcertGoal: (goal: Omit<ConcertGoal, 'id' | 'allocatedFund' | 'status' | 'isPrimary'>) => void;
   updateConcertGoal: (id: string, updates: Partial<ConcertGoal>) => void;
   deleteConcertGoal: (id: string) => void;
+  toggleArchiveConcert: (id: string) => void;
 
   // Actions - Fund Allocation
   allocateConcertFund: (concertId: string, amount: number, note?: string) => { success: boolean; message: string };
@@ -760,6 +761,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sound.playClick();
   };
 
+  const toggleArchiveConcert = (id: string) => {
+    const nextConcerts = concerts.map(c =>
+      c.id === id ? { ...c, isArchived: !c.isArchived } : c
+    );
+    setConcerts(nextConcerts);
+    syncToFirestore({ concerts: nextConcerts });
+    sound.playClick();
+  };
+
   // Fund allocation
   const allocateConcertFund = (concertId: string, amount: number, note: string = '分配演唱會專款') => {
     if (amount <= 0) {
@@ -1070,6 +1080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addConcertGoal,
         updateConcertGoal,
         deleteConcertGoal,
+        toggleArchiveConcert,
         allocateConcertFund,
         withdrawConcertFund,
         toggleConcertTask,

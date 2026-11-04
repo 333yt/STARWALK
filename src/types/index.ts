@@ -42,6 +42,28 @@ export interface Account {
   note?: string;
 }
 
+export type CurrencyCode =
+  | 'TWD'
+  | 'JPY'
+  | 'KRW'
+  | 'USD'
+  | 'CNY'
+  | 'HKD'
+  | 'EUR'
+  | 'GBP'
+  | 'SGD'
+  | 'THB';
+
+export type ExchangeRateMode = 'api' | 'manual' | 'actual_charge';
+
+export interface CurrencyConfig {
+  code: CurrencyCode;
+  symbol: string;
+  name: string;
+  flag: string;
+  defaultRateToTWD: number; // Fallback rate if API is offline
+}
+
 export interface DetailedItemInfo {
   itemName: string;
   photoUrl?: string;
@@ -63,13 +85,21 @@ export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
   type: TxType;
-  amount: number;
+  amount: number; // Converted final TWD amount used for bookkeeping & budget calculations
   categoryGroup: CategoryGroup;
   category: string;
   accountId: string;
   note: string;
   detailedItem?: DetailedItemInfo;
   createdAt: number;
+
+  // Multi-Currency additions
+  originalAmount?: number;
+  originalCurrency?: CurrencyCode;
+  exchangeRate?: number; // 1 originalCurrency = exchangeRate TWD
+  exchangeRateMode?: ExchangeRateMode;
+  exchangeRateProvider?: string;
+  exchangeRateTime?: string;
 }
 
 export interface MonthlyBudget {
@@ -129,6 +159,7 @@ export interface ConcertGoal {
   notes: string;
   status: 'planning' | 'saving' | 'ready' | 'completed';
   isPrimary: boolean;
+  isArchived?: boolean; // 封存狀態
   completedAt?: string;
   ticketStub?: TicketStub;
 }

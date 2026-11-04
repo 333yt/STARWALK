@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Sparkles, SlidersHorizontal, Check } from 'lucide-react';
-import { TxType, CategoryGroup, DailyCategory, IdolCategory, IncomeCategory } from '../types';
+import { X, Sparkles, SlidersHorizontal, Check, RefreshCw, Globe, DollarSign } from 'lucide-react';
+import { TxType, CategoryGroup, DailyCategory, IdolCategory, IncomeCategory, CurrencyCode, ExchangeRateMode } from '../types';
+import { CURRENCIES, getCurrencyConfig, fetchLiveExchangeRateToTWD, calculateTwdAmount } from '../services/currencyService';
+import { HandDrawnSticker } from './HandDrawnSticker';
 
 interface QuickTransactionModalProps {
   isOpen: boolean;
@@ -55,6 +57,17 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
   const [amountStr, setAmountStr] = useState<string>('');
   const [note, setNote] = useState<string>('');
 
+  // Multi-Currency State
+  const [currency, setCurrency] = useState<CurrencyCode>('TWD');
+  const [originalAmountStr, setOriginalAmountStr] = useState<string>('');
+  const [rateMode, setRateMode] = useState<ExchangeRateMode>('api');
+  const [exchangeRate, setExchangeRate] = useState<number>(1.0);
+  const [customRateStr, setCustomRateStr] = useState<string>('');
+  const [actualChargedTwdStr, setActualChargedTwdStr] = useState<string>('');
+  const [rateProvider, setRateProvider] = useState<string>('中央銀行 (1:1)');
+  const [rateTimeString, setRateTimeString] = useState<string>('');
+  const [isFetchingRate, setIsFetchingRate] = useState<boolean>(false);
+
   const [itemName, setItemName] = useState<string>('');
   const [groupName, setGroupName] = useState<string>('');
   const [artistName, setArtistName] = useState<string>('');
@@ -69,32 +82,94 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
   const [syncToCollection, setSyncToCollection] = useState<boolean>(true);
   const [photoPreset, setPhotoPreset] = useState<string>('/src/assets/images/idol_character_stage_star_1793698980767.jpg');
 
+  // Fetch live exchange rate when currency changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (currency === 'TWD') {
+      setExchangeRate(1.0);
+      setRateProvider('中央銀行 (1:1)');
+      setRateTimeString('');
+      return;
+    }
+
+    fetchRate(false);
+  }, [currency, isOpen]);
+
+  const fetchRate = async (forceRefresh = false) => {
+    if (currency === 'TWD') return;
+    setIsFetchingRate(true);
+    try {
+      const res = await fetchLiveExchangeRateToTWD(currency, forceRefresh);
+      setExchangeRate(res.rate);
+      setCustomRateStr(String(res.rate));
+      setRateProvider(res.provider);
+      setRateTimeString(res.timeString);
+    } catch (e) {
+      console.warn('Rate fetch error', e);
+    } finally {
+      setIsFetchingRate(false);
+    }
+  };
+
+  // Recalculate converted TWD whenever inputs change
+  useEffect(() => {
+    if (currency === 'TWD') return;
+
+    const origVal = parseFloat(originalAmountStr) || 0;
+
+    if (rateMode === 'actual_charge') {
+      const chargedTwd = parseFloat(actualChargedTwdStr) || 0;
+      setAmountStr(chargedTwd > 0 ? String(chargedTwd) : '');
+      if (origVal > 0 && chargedTwd > 0) {
+        setExchangeRate(chargedTwd / origVal);
+      }
+    } else {
+      const activeRate = rateMode === 'manual' ? (parseFloat(customRateStr) || exchangeRate) : exchangeRate;
+      const twd = calculateTwdAmount(origVal, activeRate);
+      setAmountStr(twd > 0 ? String(twd) : '');
+    }
+  }, [currency, originalAmountStr, rateMode, exchangeRate, customRateStr, actualChargedTwdStr]);
+
   if (!isOpen) return null;
 
   // Auto calculate amount in detailed mode when prices change
   const handleCalculateDetailedAmount = (qty: number, price: number, ship: number, other: number) => {
     const total = qty * price + ship + other;
     if (total > 0) {
-      setAmountStr(String(total));
+      if (currency === 'TWD') {
+        setAmountStr(String(total));
+      } else {
+        setOriginalAmountStr(String(total));
+      }
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalAmount = parseInt(amountStr, 10);
+    const finalAmount = parseFloat(amountStr);
     if (isNaN(finalAmount) || finalAmount <= 0) {
       alert('請輸入有效的交易金額！');
       return;
     }
 
+    const origAmount = currency === 'TWD' ? finalAmount : (parseFloat(originalAmountStr) || finalAmount);
+    const usedRate = currency === 'TWD' ? 1.0 : (rateMode === 'manual' ? (parseFloat(customRateStr) || exchangeRate) : exchangeRate);
+
     addTransaction({
       date,
       type,
-      amount: finalAmount,
+      amount: Math.round(finalAmount), // bookkeeping math round to nearest integer TWD
       categoryGroup: type === 'income' ? 'daily' : categoryGroup,
       category,
       accountId,
       note: note.trim() || (isDetailed ? itemName : `${category}支出`),
+      originalAmount: currency !== 'TWD' ? origAmount : undefined,
+      originalCurrency: currency !== 'TWD' ? currency : undefined,
+      exchangeRate: currency !== 'TWD' ? usedRate : undefined,
+      exchangeRateMode: currency !== 'TWD' ? rateMode : undefined,
+      exchangeRateProvider: currency !== 'TWD' ? (rateMode === 'manual' ? '手動設定匯率' : rateMode === 'actual_charge' ? '信用卡實際扣款' : rateProvider) : undefined,
+      exchangeRateTime: currency !== 'TWD' ? rateTimeString : undefined,
       detailedItem:
         type === 'expense' && (isDetailed || categoryGroup === 'idol')
           ? {
@@ -117,34 +192,39 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
 
     // Reset form
     setAmountStr('');
+    setOriginalAmountStr('');
     setNote('');
     setItemName('');
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg my-8 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-all">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#4A3728]/45 backdrop-blur-xs overflow-y-auto">
+      <div className="sketch-card relative w-full max-w-lg my-8 bg-[#FFFDF7] p-6 md:p-7 animate-stamp space-y-4">
+        {/* Decorative Washi Tape */}
+        <div
+          className="washi-tape-pink absolute -top-3.5 left-1/2 -translate-x-1/2 w-32 h-6 rounded-sm"
+          style={{ transform: 'translateX(-50%) rotate(-2deg)' }}
+        />
+
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-transparent border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-pink-500/20 text-pink-500 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
+        <div className="pb-3 border-b-2 border-dashed border-[#E5D5C5] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <HandDrawnSticker sticker="sparkles" size={40} />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-xl font-black text-[#4A3728] flex items-center gap-1.5">
                 ⚡ 經紀室｜快速記帳
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs font-bold text-[#8C7365]">
                 記錄每一筆日常與應援消費，積少成多前進演唱會！
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="sticker-btn-soft w-9 h-9 rounded-full bg-[#FFE3EC] flex items-center justify-center text-[#4A3728]"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -315,25 +395,181 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
             </div>
           )}
 
-          {/* Amount Input */}
-          <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              💰 交易金額（NT$ 新台幣）
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-sm font-bold text-pink-500">
-                NT$
-              </span>
-              <input
-                type="number"
-                min="1"
-                placeholder="0"
-                value={amountStr}
-                onChange={e => setAmountStr(e.target.value)}
-                required
-                className="w-full pl-12 pr-4 py-2.5 text-lg font-bold font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
-              />
+          {/* Multi-Currency Selection */}
+          <div className="space-y-3 p-3.5 rounded-2xl bg-gradient-to-br from-pink-50/40 via-purple-50/30 to-transparent dark:from-slate-800/60 dark:to-slate-800/20 border border-pink-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-pink-500" />
+                <span>🌐 交易幣別與多國匯率換算</span>
+              </label>
+
+              <select
+                value={currency}
+                onChange={e => setCurrency(e.target.value as CurrencyCode)}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-pink-600 dark:text-pink-400 outline-none focus:ring-2 focus:ring-pink-500"
+              >
+                {CURRENCIES.map(c => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {currency !== 'TWD' ? (
+              <div className="space-y-3 pt-1 border-t border-slate-200/50 dark:border-slate-700/50 text-xs">
+                {/* Foreign Amount Input */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    外幣交易金額 ({getCurrencyConfig(currency).symbol} {currency}) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-sm font-bold text-purple-600 dark:text-purple-400 font-mono">
+                      {getCurrencyConfig(currency).symbol}
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0"
+                      value={originalAmountStr}
+                      onChange={e => setOriginalAmountStr(e.target.value)}
+                      required
+                      className="w-full pl-12 pr-4 py-2 text-base font-bold font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Rate Mode Selector */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    匯率計算方式
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setRateMode('api')}
+                      className={`py-1.5 px-2 text-[11px] font-bold rounded-xl border transition-all text-center ${
+                        rateMode === 'api'
+                          ? 'bg-pink-500 text-white border-pink-500 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      ⚡ 即時匯率 API
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRateMode('manual')}
+                      className={`py-1.5 px-2 text-[11px] font-bold rounded-xl border transition-all text-center ${
+                        rateMode === 'manual'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      ✍️ 自訂匯率
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRateMode('actual_charge')}
+                      className={`py-1.5 px-2 text-[11px] font-bold rounded-xl border transition-all text-center ${
+                        rateMode === 'actual_charge'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      💳 實際扣款金額
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mode Details */}
+                {rateMode === 'api' && (
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <div className="font-mono font-bold text-slate-900 dark:text-white">
+                        1 {currency} = {exchangeRate.toFixed(4)} TWD
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        來源：{rateProvider} {rateTimeString && `(${rateTimeString})`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isFetchingRate}
+                      onClick={() => fetchRate(true)}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-pink-500 transition-colors"
+                      title="刷新即時匯率"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isFetchingRate ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                )}
+
+                {rateMode === 'manual' && (
+                  <div>
+                    <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                      自訂 1 {currency} 兌換新台幣 (TWD) 匯率
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.00001"
+                      value={customRateStr}
+                      onChange={e => setCustomRateStr(e.target.value)}
+                      placeholder="例如：0.2145"
+                      className="w-full px-3 py-1.5 text-xs font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                )}
+
+                {rateMode === 'actual_charge' && (
+                  <div>
+                    <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                      信用卡帳單或銀行實際出帳 NT$ 金額
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={actualChargedTwdStr}
+                      onChange={e => setActualChargedTwdStr(e.target.value)}
+                      placeholder="例如：2150"
+                      className="w-full px-3 py-1.5 text-xs font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                )}
+
+                {/* Converted Summary Math Box */}
+                <div className="p-2.5 rounded-xl bg-pink-50/80 dark:bg-pink-950/40 border border-pink-200/60 dark:border-pink-900/40 flex items-center justify-between font-mono">
+                  <span className="text-slate-600 dark:text-slate-300 text-[11px]">
+                    換算新台幣金額：
+                  </span>
+                  <span className="text-sm font-black text-pink-600 dark:text-pink-400">
+                    NT$ {amountStr ? Number(amountStr).toLocaleString() : '0'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* Standard TWD Input */
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  💰 交易金額 (NT$ 新台幣) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-sm font-bold text-pink-500 font-mono">
+                    NT$
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={amountStr}
+                    onChange={e => setAmountStr(e.target.value)}
+                    required
+                    className="w-full pl-12 pr-4 py-2.5 text-lg font-bold font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Note */}

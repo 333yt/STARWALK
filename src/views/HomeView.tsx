@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Sparkles,
   Ticket,
   CalendarCheck,
   CalendarX,
-  PlusCircle,
-  TrendingUp,
-  Award,
-  ChevronRight,
-  ArrowUpRight,
+  Plus,
   Compass,
   CheckCircle2,
-  AlertCircle
+  Camera,
+  ChevronRight,
+  Zap
 } from 'lucide-react';
+import { CharacterPhotoModal } from '../components/CharacterPhotoModal';
+import { DEFAULT_CHARACTER_AVATAR } from '../assets/defaultAvatars';
+import { HandDrawnSticker } from '../components/HandDrawnSticker';
 
 interface HomeViewProps {
   onOpenQuickTx: () => void;
@@ -22,11 +23,10 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickTx }) => {
   const {
     characterProfile,
+    updateCharacterProfile,
     primaryConcert,
     setActiveTab,
     isTodayRecorded,
-    monthTotalIncome,
-    monthTotalExpense,
     monthDailyExpense,
     monthIdolExpense,
     currentMonthBudgetLimit,
@@ -35,13 +35,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickTx }) => {
     totalAllocatedFunds,
     dailyMissions,
     completeDailyMission,
-    transactions,
-    achievements
+    transactions
   } = useApp();
+
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   const latestTransaction = transactions[0];
 
-  // Primary concert progress
+  // Primary concert progress calculation
   const concertProgress = primaryConcert
     ? Math.min(100, (primaryConcert.allocatedFund / (primaryConcert.budgetPlan.total || 1)) * 100)
     : 0;
@@ -51,326 +52,413 @@ export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickTx }) => {
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Top Hero Welcome Card */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-indigo-500/10 border border-pink-200/60 dark:border-pink-900/40 p-6 md:p-8 backdrop-blur-sm">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-pink-400/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          {/* Avatar and Welcome Greetings */}
-          <div className="flex items-center gap-4">
-            <div className="relative shrink-0">
-              <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-xl shadow-pink-500/20 group">
+      <CharacterPhotoModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
+        currentAvatarUrl={characterProfile.avatarUrl || DEFAULT_CHARACTER_AVATAR}
+        onSaveAvatar={(newAvatarUrl) => {
+          updateCharacterProfile({ avatarUrl: newAvatarUrl });
+        }}
+      />
+
+      {/* HERO MANAGER GREETING POSTCARD (Hobonichi Style) */}
+      <section className="sketch-card relative overflow-hidden bg-gradient-to-r from-[#FFE8F2] via-[#FFF6EB] to-[#F3E8FF] p-6 md:p-7">
+        {/* Decorative Washi Tapes */}
+        <div
+          className="washi-tape-yellow absolute -top-3 left-16 w-28 h-5 rounded-sm"
+          style={{ transform: 'rotate(-2deg)' }}
+        />
+        <div
+          className="washi-tape-mint absolute -top-3 right-20 w-24 h-5 rounded-sm hidden sm:block"
+          style={{ transform: 'rotate(3deg)' }}
+        />
+
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-6 relative z-10">
+          {/* Avatar & Welcome Info */}
+          <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-6 text-center sm:text-left">
+            {/* Hand-Drawn Polaroid Avatar Frame */}
+            <div className="relative shrink-0 group">
+              <button
+                type="button"
+                onClick={() => setIsPhotoModalOpen(true)}
+                title="點擊更換角色照片"
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white border-[2.5px] border-[#4A3728] shadow-[4px_4px_0px_#4A3728] overflow-hidden p-1 relative block focus:outline-none transition-transform group-hover:scale-105 cursor-pointer"
+              >
                 <img
-                  src={characterProfile.avatarUrl}
+                  src={characterProfile.avatarUrl || DEFAULT_CHARACTER_AVATAR}
                   alt={characterProfile.name}
                   referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-cover rounded-2xl"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = DEFAULT_CHARACTER_AVATAR;
+                  }}
                 />
-              </div>
-              <span className="absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md">
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-black gap-1">
+                  <Camera className="w-5 h-5 text-[#FFD84D] animate-bounce" />
+                  <span>更換頭貼</span>
+                </div>
+              </button>
+
+              {/* Level Badge Pill */}
+              <span className="absolute -bottom-2 -right-2 bg-[#FF5C8A] text-white font-mono-num text-xs font-black px-2.5 py-0.5 rounded-full border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728] z-20">
                 Lv.{characterProfile.level}
               </span>
             </div>
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-pink-600 dark:text-pink-400 bg-pink-100/80 dark:bg-pink-950/80 px-2.5 py-0.5 rounded-full border border-pink-200/50">
-                  {characterProfile.currentOutfit}
+            <div className="space-y-2">
+              {/* Badges Row */}
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <span className="px-3 py-1 rounded-full bg-[#FFD6E6] border-2 border-[#4A3728] text-xs font-black text-[#D9386A] shadow-[2px_2px_0px_#4A3728]">
+                  👗 {characterProfile.currentOutfit}
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  ✨ 經紀星光幣：{characterProfile.agencyPoints} P
+                <span className="px-3 py-1 rounded-full bg-[#FFF5CC] border-2 border-[#4A3728] text-xs font-black text-[#4A3728] shadow-[2px_2px_0px_#4A3728]">
+                  ✨ 經紀星光幣：
+                  <strong className="font-mono-num text-[#E58A1F] ml-1">
+                    {characterProfile.agencyPoints} P
+                  </strong>
                 </span>
               </div>
-              <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+
+              {/* Title & Motto */}
+              <h1 className="text-2xl sm:text-3xl font-black text-[#4A3728] tracking-tight">
                 早安，{characterProfile.name}！💖
               </h1>
-              <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-xs sm:text-sm font-bold text-[#6E5646]">
                 記帳是工具，收藏是回憶，遊戲是動力，演唱會是目標！
               </p>
 
-              {/* XP Progress Bar */}
-              <div className="pt-2 max-w-xs">
-                <div className="flex justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+              {/* Crayon XP Progress Bar */}
+              <div className="pt-1 max-w-md mx-auto sm:mx-0">
+                <div className="flex items-center justify-between text-xs font-black text-[#6E5646] mb-1">
                   <span>角色成長經驗值 (XP)</span>
-                  <span className="font-mono tabular-nums">
+                  <span className="font-mono-num text-[#4A3728]">
                     {characterProfile.xp} / {xpMaxForLevel} XP ({xpPercent}%)
                   </span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                <div className="w-full h-4 rounded-full bg-white border-2 border-[#4A3728] overflow-hidden p-0.5 shadow-inner">
                   <div
-                    className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${xpPercent}%` }}
+                    className="h-full rounded-full crayon-stripe-pink transition-all duration-500"
+                    style={{ width: `${Math.max(6, xpPercent)}%` }}
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Today's Bookkeeping Status & Fast Trigger */}
-          <div className="flex flex-row md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-pink-200/40">
-            <div className="flex items-center gap-2">
+          {/* Right Status & Fast Trigger */}
+          <div className="flex flex-col items-center lg:items-end gap-3 shrink-0">
+            <div
+              onClick={() => setActiveTab('bookkeeping')}
+              className={`px-4 py-2 rounded-full border-2 border-[#4A3728] shadow-[2.5px_2.5px_0px_#4A3728] text-xs font-black flex items-center gap-1.5 cursor-pointer ${
+                isTodayRecorded
+                  ? 'bg-[#E4FBF0] text-[#1E8E68]'
+                  : 'bg-[#FFF3CD] text-[#B86E14] animate-pulse'
+              }`}
+            >
               {isTodayRecorded ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
-                  <CalendarCheck className="w-4 h-4 text-emerald-500" />
+                <>
+                  <CalendarCheck className="w-4 h-4 text-[#1E8E68]" />
                   <span>今日記帳已完成 ✨</span>
-                </div>
+                </>
               ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-semibold animate-pulse">
-                  <CalendarX className="w-4 h-4 text-amber-500" />
+                <>
+                  <CalendarX className="w-4 h-4 text-[#B86E14]" />
                   <span>今日尚未記帳 ✍️</span>
-                </div>
+                </>
               )}
             </div>
 
             <button
               onClick={onOpenQuickTx}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 shadow-md hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+              className="sticker-btn px-6 py-3 rounded-full bg-gradient-to-r from-[#FF4785] to-[#B833FF] text-white text-sm font-black flex items-center gap-2"
             >
-              <PlusCircle className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <Zap className="w-4 h-4 fill-[#FFD84D] text-[#FFD84D]" />
               <span>快速記一筆</span>
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Grid: Main Concert Journey Highlight & Monthly Budget Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Concert Journey Card (2 cols) */}
-        {primaryConcert ? (
-          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow transition-shadow relative overflow-hidden">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Ticket className="w-5 h-5 text-pink-500" />
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                  進行中的主要演唱會旅程
-                </h3>
-              </div>
-              <button
-                onClick={() => setActiveTab('concerts')}
-                className="text-xs font-semibold text-pink-600 dark:text-pink-400 hover:underline flex items-center gap-0.5"
-              >
-                <span>完整旅程地圖</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+      {/* BENTO GRID: CONCERT GOAL (LEFT 7/12) + MONTHLY BUDGET ENVELOPE (RIGHT 5/12) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* LEFT COLUMN (7/12): PRIMARY CONCERT GOAL TICKET CARD */}
+        <div className="lg:col-span-7 flex flex-col">
+          {primaryConcert ? (
+            <div className="sketch-card bg-[#FFF8FA] p-6 md:p-7 flex-1 flex flex-col justify-between relative overflow-hidden">
+              {/* Ticket Side Notch Cutouts */}
+              <div className="w-7 h-7 rounded-full bg-[#FFFDF7] border-[2.5px] border-[#4A3728] absolute -left-4 top-1/2 -translate-y-1/2" />
+              <div className="w-7 h-7 rounded-full bg-[#FFFDF7] border-[2.5px] border-[#4A3728] absolute -right-4 top-1/2 -translate-y-1/2" />
 
-            <div className="mt-4 flex flex-col sm:flex-row items-center gap-5">
-              <div className="w-full sm:w-36 h-36 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 relative group">
-                <img
-                  src={primaryConcert.coverImage}
-                  alt={primaryConcert.title}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-                <span className="absolute top-2 left-2 px-2 py-0.5 text-[10px] font-bold bg-black/70 text-white rounded-md backdrop-blur-xs">
-                  {primaryConcert.artist}
-                </span>
-              </div>
-
-              <div className="flex-1 w-full space-y-3">
-                <div>
-                  <h4 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                    {primaryConcert.title}
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    📍 {primaryConcert.city} · {primaryConcert.venue} · 📅 {primaryConcert.date || '日期規劃中'}
-                  </p>
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-[#FF4785] text-white text-xs font-black border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728]">
+                      🎫 進行中主旅程
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-[#FFF3B0] text-[#4A3728] text-xs font-black border-2 border-[#4A3728]">
+                      📍 {primaryConcert.city} · {primaryConcert.venue}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('concerts')}
+                    className="text-xs font-black text-[#FF3B75] hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <span>完整地圖</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Progress calculation */}
-                <div>
-                  <div className="flex justify-between items-baseline text-xs mb-1">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      專屬基金達成率
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-20 h-20 rounded-2xl border-2 border-[#4A3728] overflow-hidden shrink-0 shadow-[2px_2px_0px_#4A3728] bg-slate-900">
+                    <img
+                      src={primaryConcert.coverImage}
+                      alt={primaryConcert.title}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-[#FF5C8A]">
+                      {primaryConcert.artist}
                     </span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-black text-pink-600 dark:text-pink-400 font-mono tabular-nums">
-                        {concertProgress.toFixed(1)}%
+                    <h2 className="text-lg font-black text-[#4A3728] leading-snug">
+                      {primaryConcert.title}
+                    </h2>
+                    <p className="text-xs font-bold text-[#8C7365] mt-1 font-mono-num">
+                      📅 {primaryConcert.date || '日期待公布'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Savings Progress Box */}
+                <div className="bg-white p-4 rounded-2xl border-2 border-[#4A3728] shadow-[3px_3px_0px_#F0DCE4] mb-4">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-xs font-black text-[#8C7365]">
+                      專屬儲蓄達成率
+                    </span>
+                    <div className="font-mono-num text-base font-black">
+                      <span className="text-[#FF4785]">
+                        NT$ {primaryConcert.allocatedFund.toLocaleString()}
                       </span>
-                      <span className="text-slate-400 text-[11px]">
-                        (NT$ {primaryConcert.allocatedFund.toLocaleString()} / NT$ {primaryConcert.budgetPlan.total.toLocaleString()})
+                      <span className="text-xs text-[#8C7365] mx-1">/</span>
+                      <span className="text-sm text-[#4A3728]">
+                        NT$ {primaryConcert.budgetPlan.total.toLocaleString()}
                       </span>
                     </div>
                   </div>
 
-                  {/* Smooth Progress Bar with Doll Marker */}
-                  <div className="relative w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-visible">
+                  <div className="w-full h-4 rounded-full bg-[#F5EBE1] border-2 border-[#4A3728] overflow-hidden p-0.5">
                     <div
-                      className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full transition-all duration-700"
+                      className="h-full rounded-full crayon-stripe-pink transition-all duration-500"
                       style={{ width: `${concertProgress}%` }}
                     />
-                    <div
-                      className="absolute -top-3 transition-all duration-700 transform -translate-x-1/2"
-                      style={{ left: `${concertProgress}%` }}
-                    >
-                      <div className="w-7 h-7 rounded-full border-2 border-pink-400 bg-white dark:bg-slate-900 shadow-md flex items-center justify-center text-xs">
-                        🧸
-                      </div>
-                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-bold text-[#8C7365] mt-2">
+                    <span>
+                      達成進度：
+                      <strong className="font-mono-num text-[#FF4785] ml-0.5">
+                        {concertProgress.toFixed(1)}%
+                      </strong>
+                    </span>
+                    <span>
+                      剩餘目標：NT${' '}
+                      <strong className="font-mono-num text-[#4A3728]">
+                        {Math.max(0, primaryConcert.budgetPlan.total - primaryConcert.allocatedFund).toLocaleString()}
+                      </strong>
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
-                  <span>🏠 出發起點</span>
-                  <span>🎟️ 搶票</span>
-                  <span>🚆 住宿交通</span>
-                  <span>🏟️ 巨蛋舞台</span>
-                </div>
+              {/* Perforated Tear Line & Footer */}
+              <div className="border-t-2 border-dashed border-[#4A3728]/35 pt-3 flex items-center justify-between text-xs font-bold text-[#6E5646]">
+                <span className="truncate max-w-[220px]">
+                  💡 {primaryConcert.notes || '持續儲蓄前進巨蛋！'}
+                </span>
+                <button
+                  onClick={() => setActiveTab('concerts')}
+                  className="sticker-btn px-4 py-1.5 rounded-full bg-[#4A3728] text-white text-xs font-black shrink-0"
+                >
+                  前往分配專款
+                </button>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 p-8 flex flex-col items-center justify-center text-center">
-            <Compass className="w-10 h-10 text-pink-400 mb-2" />
-            <h4 className="font-bold text-slate-800 dark:text-slate-200">
-              尚未設定主要演唱會目標
-            </h4>
-            <p className="text-xs text-slate-500 mt-1 mb-4">
-              設定你想參加的下一場偶像舞台，啟動專屬存錢地圖！
-            </p>
-            <button
-              onClick={() => setActiveTab('concerts')}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-pink-500 hover:bg-pink-600"
-            >
-              + 建立第一個演唱會目標
-            </button>
-          </div>
-        )}
+          ) : (
+            <div className="sketch-card bg-[#FFFDF7] p-8 flex-1 flex flex-col items-center justify-center text-center relative overflow-hidden">
+              <div
+                className="washi-tape-pink absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-5 rounded-sm"
+                style={{ transform: 'translateX(-50%) rotate(-2deg)' }}
+              />
+              <div className="w-16 h-16 rounded-full bg-[#FFE3EC] border-[2.5px] border-[#4A3728] shadow-[3px_3px_0px_#4A3728] flex items-center justify-center mb-3 animate-float-slow text-2xl">
+                <Compass className="w-8 h-8 text-[#FF4785]" />
+              </div>
+              <h2 className="text-lg font-black text-[#4A3728] mb-1">
+                尚未設定主要演唱會目標
+              </h2>
+              <p className="text-xs font-bold text-[#8C7365] max-w-sm mb-5">
+                設定你想參加的下一場演唱會，啟動專屬存錢與任務地圖！
+              </p>
+              <button
+                onClick={() => setActiveTab('concerts')}
+                className="sticker-btn px-6 py-2.5 rounded-full bg-[#FF3B75] text-white text-xs font-black flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>＋ 建立演唱會目標</span>
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Monthly Budget Summary (1 col) */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                本月消費預算
+        {/* RIGHT COLUMN (5/12): MONTHLY CONSUMPTION BUDGET ENVELOPE */}
+        <div className="lg:col-span-5 sketch-card bg-white p-6 md:p-7 flex flex-col justify-between relative">
+          <div
+            className="washi-tape-mint absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-5 rounded-sm"
+            style={{ transform: 'translateX(-50%) rotate(2deg)' }}
+          />
+
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b-2 border-dashed border-[#E6D7C3] pb-3">
+              <span className="text-base font-black text-[#4A3728] flex items-center gap-1.5">
+                📊 本月消費預算
               </span>
               <button
                 onClick={() => setActiveTab('analytics')}
-                className="text-xs font-semibold text-pink-500 hover:underline"
+                className="text-xs font-black text-[#FF3B75] hover:underline px-2.5 py-1 rounded-full bg-[#FFE3EC] border border-[#4A3728] cursor-pointer"
               >
                 調整預算
               </button>
             </div>
 
-            <div className="mt-4">
-              <div className="text-xs text-slate-400">本月剩餘可用額度</div>
+            {/* Remaining Budget Display */}
+            <div>
+              <div className="text-xs font-bold text-[#8C7365] mb-1">
+                本月剩餘可用額度
+              </div>
               <div
-                className={`text-2xl font-black font-mono tabular-nums mt-0.5 ${
-                  monthBudgetRemaining >= 0
-                    ? 'text-slate-900 dark:text-white'
-                    : 'text-rose-500'
+                className={`font-mono-num text-3xl sm:text-4xl font-black tracking-tight ${
+                  monthBudgetRemaining >= 0 ? 'text-[#4A3728]' : 'text-rose-500'
                 }`}
               >
                 NT$ {monthBudgetRemaining.toLocaleString()}
               </div>
-              <div className="text-xs text-slate-400 mt-1">
-                預算上限：NT$ {currentMonthBudgetLimit.toLocaleString()} · 已使用 {monthBudgetUsagePercent}%
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full mt-3 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    monthBudgetUsagePercent > 90
-                      ? 'bg-rose-500'
-                      : monthBudgetUsagePercent > 75
-                      ? 'bg-amber-500'
-                      : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.min(100, monthBudgetUsagePercent)}%` }}
-                />
+              <div className="text-xs font-bold text-[#8C7365] mt-1.5">
+                預算上限：NT$ {currentMonthBudgetLimit.toLocaleString()} · 已使用{' '}
+                <span className="font-mono-num text-[#FF4785] font-black">
+                  {monthBudgetUsagePercent}%
+                </span>
               </div>
             </div>
 
-            {/* Daily vs Idol Breakdown */}
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                <div className="text-slate-400 text-[11px]">🍱 日常生活</div>
-                <div className="font-bold text-slate-800 dark:text-slate-200 font-mono tabular-nums mt-0.5">
+            {/* Crayon Progress Bar */}
+            <div className="w-full h-3.5 rounded-full bg-[#F5EBE1] border-2 border-[#4A3728] overflow-hidden p-0.5">
+              <div
+                className="h-full rounded-full crayon-stripe-mint transition-all duration-500"
+                style={{ width: `${Math.max(4, monthBudgetUsagePercent)}%` }}
+              />
+            </div>
+
+            {/* 2 Sub-Envelopes: Daily vs Idol */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="p-3.5 rounded-2xl bg-[#FFFDF5] border-2 border-[#4A3728] shadow-[2px_2px_0px_#E6D7C3]">
+                <div className="text-xs font-bold text-[#8C7365] flex items-center gap-1 mb-1">
+                  <span>🍱 日常生活</span>
+                </div>
+                <div className="font-mono-num text-base font-black text-[#4A3728]">
                   NT$ {monthDailyExpense.toLocaleString()}
                 </div>
               </div>
-              <div className="p-2.5 rounded-xl bg-pink-50/60 dark:bg-pink-950/30">
-                <div className="text-pink-500 dark:text-pink-400 text-[11px]">🎤 追星消費</div>
-                <div className="font-bold text-pink-700 dark:text-pink-300 font-mono tabular-nums mt-0.5">
+
+              <div className="p-3.5 rounded-2xl bg-[#FFF2F7] border-2 border-[#4A3728] shadow-[2px_2px_0px_#F5CEDC]">
+                <div className="text-xs font-bold text-[#FF3B75] flex items-center gap-1 mb-1">
+                  <span>🎤 追星消費</span>
+                </div>
+                <div className="font-mono-num text-base font-black text-[#FF3B75]">
                   NT$ {monthIdolExpense.toLocaleString()}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <span>💎 已分配演唱會基金</span>
-            <span className="font-bold font-mono text-purple-600 dark:text-purple-400">
+          {/* Bottom Allocated Concert Fund Row */}
+          <div className="border-t-2 border-dashed border-[#E6D7C3] pt-3 mt-4 flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-black text-[#6E5646]">
+              💎 已分配演唱會專屬基金
+            </span>
+            <span className="font-mono-num text-base font-black text-[#8A5CF5]">
               NT$ {totalAllocatedFunds.toLocaleString()}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Row: Daily Missions & Recent Bookkeeping Transaction */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Today's Quests (2 cols) */}
-        <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+      {/* ROW: DAILY MISSIONS & RECENT STICKERS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Daily Missions (8/12) */}
+        <div className="lg:col-span-8 sketch-card bg-white p-6 space-y-4">
+          <div className="flex items-center justify-between border-b-2 border-dashed border-[#E6D7C3] pb-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-pink-500" />
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                經紀人日常任務中心（完成領取角色經驗值）
+              <HandDrawnSticker sticker="sparkles" size={32} />
+              <h3 className="text-base font-black text-[#4A3728]">
+                經紀人日常任務中心（完成領取角色 XP 經驗值）
               </h3>
             </div>
-            <span className="text-xs text-slate-400">
-              經驗值僅來自任務，消費不增加 XP
+            <span className="text-[11px] font-bold text-[#8C7365] hidden sm:inline">
+              經驗值僅來自任務
             </span>
           </div>
 
-          <div className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="space-y-2.5">
             {dailyMissions.map(mission => (
               <div
                 key={mission.id}
-                className="py-3 flex items-center justify-between gap-3"
+                className="p-3.5 rounded-2xl border-2 border-[#4A3728] bg-[#FFFDF7] flex items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3">
                   <button
+                    type="button"
                     onClick={() => completeDailyMission(mission.id)}
                     disabled={mission.isCompleted}
-                    className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+                    className={`w-6 h-6 rounded-xl border-2 border-[#4A3728] flex items-center justify-center transition-all cursor-pointer ${
                       mission.isCompleted
-                        ? 'bg-emerald-500 text-white'
-                        : 'border-2 border-slate-300 dark:border-slate-700 hover:border-pink-500'
+                        ? 'bg-[#1E9E73] text-white shadow-[1px_1px_0px_#4A3728]'
+                        : 'bg-white hover:bg-[#FFE3EC]'
                     }`}
                   >
-                    {mission.isCompleted && <CheckCircle2 className="w-4 h-4" />}
+                    {mission.isCompleted && <CheckCircle2 className="w-4 h-4 stroke-[3]" />}
                   </button>
                   <div>
                     <h5
-                      className={`text-xs font-semibold ${
+                      className={`text-xs font-black ${
                         mission.isCompleted
-                          ? 'line-through text-slate-400 dark:text-slate-500'
-                          : 'text-slate-800 dark:text-slate-200'
+                          ? 'line-through text-[#8C7365]'
+                          : 'text-[#4A3728]'
                       }`}
                     >
                       {mission.title}
                     </h5>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-[11px] font-bold text-[#8C7365] mt-0.5">
                       {mission.description}
                     </p>
                   </div>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-600 dark:text-purple-400 font-mono">
+                  <span className="text-xs font-black font-mono-num text-[#8A5CF5]">
                     +{mission.xp} XP
                   </span>
                   {mission.isCompleted ? (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 font-medium">
+                    <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E4FBF0] text-[#1E9E73] border border-[#4A3728]">
                       已達成
                     </span>
                   ) : (
                     <button
                       onClick={() => completeDailyMission(mission.id)}
-                      className="px-2.5 py-1 text-xs font-medium text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/40 rounded-lg border border-pink-200 dark:border-pink-900/50"
+                      className="sticker-btn px-3 py-1 rounded-full bg-[#FF5C8A] text-white text-xs font-black"
                     >
-                      領取獎勵
+                      領取
                     </button>
                   )}
                 </div>
@@ -379,76 +467,76 @@ export const HomeView: React.FC<HomeViewProps> = ({ onOpenQuickTx }) => {
           </div>
         </div>
 
-        {/* Latest Transaction & Quick Links (1 col) */}
-        <div className="space-y-6">
-          {/* Latest Transaction */}
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+        {/* Latest Transaction & Quick Links (4/12) */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="sketch-card bg-white p-5 space-y-3">
+            <div className="flex items-center justify-between border-b-2 border-dashed border-[#E6D7C3] pb-2">
+              <span className="text-xs font-black text-[#8C7365]">
                 最近一筆記帳紀錄
               </span>
               <button
                 onClick={() => setActiveTab('bookkeeping')}
-                className="text-xs font-semibold text-pink-500 hover:underline"
+                className="text-xs font-black text-[#FF3B75] hover:underline"
               >
                 查看完整帳本
               </button>
             </div>
 
             {latestTransaction ? (
-              <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <div className="p-3.5 rounded-2xl border-2 border-[#4A3728] bg-[#FFFDF7] space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <span className="text-xs font-black text-[#4A3728] flex items-center gap-1.5">
+                    <HandDrawnSticker sticker={latestTransaction.detailedItem ? 'photocard' : 'sparkles'} size={24} />
                     {latestTransaction.category}
                   </span>
                   <span
-                    className={`text-sm font-bold font-mono tabular-nums ${
+                    className={`font-mono-num text-sm font-black ${
                       latestTransaction.type === 'income'
-                        ? 'text-emerald-500'
-                        : 'text-rose-500'
+                        ? 'text-[#1E9E73]'
+                        : 'text-[#FF3B75]'
                     }`}
                   >
                     {latestTransaction.type === 'income' ? '+' : '-'} NT${' '}
                     {latestTransaction.amount.toLocaleString()}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+                <p className="text-xs font-bold text-[#6E5646] truncate">
                   {latestTransaction.note || '無備註'}
                 </p>
-                <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="text-[10px] font-mono-num font-bold text-[#8C7365] flex items-center justify-between">
                   <span>{latestTransaction.date}</span>
-                  <span className="capitalize">{latestTransaction.categoryGroup === 'idol' ? '🎤 追星' : '🍱 日常'}</span>
+                  <span>{latestTransaction.categoryGroup === 'idol' ? '🎤 追星' : '🍱 日常'}</span>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 mt-4 text-center py-4">
+              <p className="text-xs font-bold text-[#8C7365] text-center py-6">
                 目前尚無收支紀錄，點擊上方快速記一筆吧！
               </p>
             )}
           </div>
 
-          {/* Quick Shortcuts to Collection & Memories */}
+          {/* Quick Shortcuts */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setActiveTab('collectibles')}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-500/10 to-rose-500/10 border border-pink-200/60 dark:border-pink-900/40 text-left hover:scale-[1.02] transition-transform"
+              className="sketch-card bg-[#FFEBF2] p-3.5 text-left hover:-translate-y-0.5 transition-transform"
             >
-              <div className="text-lg">💖</div>
-              <div className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+              <div className="text-xl">💖</div>
+              <div className="text-xs font-black text-[#4A3728] mt-1">
                 追星收藏冊
               </div>
-              <div className="text-[10px] text-slate-500">小卡周邊照片牆</div>
+              <div className="text-[10px] font-bold text-[#8C7365]">小卡周邊照片牆</div>
             </button>
 
             <button
               onClick={() => setActiveTab('memories')}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border border-purple-200/60 dark:border-purple-900/40 text-left hover:scale-[1.02] transition-transform"
+              className="sketch-card bg-[#F2EAFF] p-3.5 text-left hover:-translate-y-0.5 transition-transform"
             >
-              <div className="text-lg">🎟️</div>
-              <div className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+              <div className="text-xl">🎟️</div>
+              <div className="text-xs font-black text-[#4A3728] mt-1">
                 星途回憶館
               </div>
-              <div className="text-[10px] text-slate-500">紀念票根與年度回顧</div>
+              <div className="text-[10px] font-bold text-[#8C7365]">紀念票根年度回顧</div>
             </button>
           </div>
         </div>

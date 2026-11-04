@@ -6,17 +6,12 @@ import {
   ChevronRight,
   PlusCircle,
   Search,
-  Filter,
   Trash2,
-  Edit2,
   Calendar as CalendarIcon,
-  ShoppingBag,
-  Heart,
-  TrendingDown,
-  TrendingUp,
-  X
+  ListFilter
 } from 'lucide-react';
 import { Transaction } from '../types';
+import { HandDrawnSticker } from '../components/HandDrawnSticker';
 
 interface BookkeepingViewProps {
   onOpenQuickTxWithDate: (date: string) => void;
@@ -43,7 +38,6 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
   const [filterType, setFilterType] = useState<'all' | 'daily' | 'idol' | 'income'>('all');
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
 
-  // Month helpers
   const handlePrevMonth = () => {
     let newYear = year;
     let newMonth = month - 1;
@@ -72,11 +66,10 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
     setCurrentYearMonth(today.substring(0, 7));
   };
 
-  // Generate calendar days for the current month
+  // Generate calendar days for current month
   const calendarDays = useMemo(() => {
-    const firstDayIndex = new Date(year, month - 1, 1).getDay(); // 0 is Sun, 1 is Mon...
-    // We want Monday as first day (0: Mon ... 6: Sun)
-    const startOffset = (firstDayIndex + 6) % 7;
+    const firstDayIndex = new Date(year, month - 1, 1).getDay();
+    const startOffset = (firstDayIndex + 6) % 7; // Monday-first
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const daysInPrevMonth = new Date(year, month - 1, 0).getDate();
@@ -104,7 +97,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
       });
     }
 
-    // Next month padding to fill complete grid of 35 or 42
+    // Next month padding to fill grid
     const totalCells = days.length <= 35 ? 35 : 42;
     const remaining = totalCells - days.length;
     for (let d = 1; d <= remaining; d++) {
@@ -120,7 +113,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
     return days;
   }, [year, month]);
 
-  // Map of date -> transactions & total daily expense
+  // Map of date -> transactions
   const dailySummaryMap = useMemo(() => {
     const map = new Map<string, { txs: Transaction[]; totalExpense: number; totalIncome: number; hasIdol: boolean }>();
     transactions.forEach(tx => {
@@ -137,7 +130,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
     return map;
   }, [transactions]);
 
-  // Selected date's transactions
+  // Selected date info
   const selectedDayInfo = dailySummaryMap.get(selectedDate) || {
     txs: [],
     totalExpense: 0,
@@ -145,19 +138,16 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
     hasIdol: false
   };
 
-  // Month-filtered transactions for list mode / search
+  // Filtered transactions for list mode
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-      // Month match
       const isMonth = tx.date.startsWith(currentYearMonth);
       if (!isMonth) return false;
 
-      // Filter type
       if (filterType === 'daily' && (tx.type !== 'expense' || tx.categoryGroup !== 'daily')) return false;
       if (filterType === 'idol' && (tx.type !== 'expense' || tx.categoryGroup !== 'idol')) return false;
       if (filterType === 'income' && tx.type !== 'income') return false;
 
-      // Search
       if (searchKeyword.trim()) {
         const kw = searchKeyword.toLowerCase();
         const matchNote = tx.note.toLowerCase().includes(kw);
@@ -172,47 +162,51 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
   }, [transactions, currentYearMonth, filterType, searchKeyword]);
 
   return (
-    <div className="space-y-6 pb-20">
-      {/* Top Header Controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-5 pb-20">
+      {/* Top Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-pink-500" />
-            <span>📅 經紀日誌｜月曆記帳</span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            完整互動月曆、點擊查看每日明細、即時新增收支紀錄
+          <h1 className="text-2xl font-black text-[#4A3728] flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[#FFE3EC] border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728] text-lg">
+              📅
+            </span>
+            <span>公司帳本｜經紀日誌</span>
+          </h1>
+          <p className="text-xs sm:text-sm font-bold text-[#8C7365] mt-1">
+            完整手繪風月曆、點擊查看每日明細與發票小票
           </p>
         </div>
 
-        {/* View mode toggle and Add button */}
-        <div className="flex items-center gap-2">
-          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-semibold">
+        {/* View mode toggle */}
+        <div className="flex items-center gap-3 self-start sm:self-center">
+          <div className="inline-flex p-1 rounded-full bg-[#F5EBE1] border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728]">
             <button
               onClick={() => setViewMode('calendar')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
                 viewMode === 'calendar'
-                  ? 'bg-white dark:bg-slate-900 text-pink-600 dark:text-pink-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-[#FF3B75] border border-[#4A3728] shadow-xs'
+                  : 'text-[#6E5646]'
               }`}
             >
-              📅 月曆檢視
+              <CalendarIcon className="w-3.5 h-3.5" />
+              <span>月曆模式</span>
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
                 viewMode === 'list'
-                  ? 'bg-white dark:bg-slate-900 text-pink-600 dark:text-pink-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-[#FF3B75] border border-[#4A3728] shadow-xs'
+                  : 'text-[#6E5646]'
               }`}
             >
-              📋 清單檢視
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>清單模式</span>
             </button>
           </div>
 
           <button
             onClick={() => onOpenQuickTxWithDate(selectedDate)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-pink-500 hover:bg-pink-600 rounded-xl shadow-sm transition-all"
+            className="sticker-btn px-5 py-2.5 rounded-full bg-[#FF2E7E] text-white text-xs sm:text-sm font-black flex items-center gap-1.5"
           >
             <PlusCircle className="w-4 h-4" />
             <span>記一筆</span>
@@ -221,105 +215,127 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
       </div>
 
       {/* Month Selector Bar */}
-      <div className="flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-2">
+      <div className="sketch-card bg-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
           <button
             onClick={handlePrevMonth}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="sticker-btn-soft w-9 h-9 rounded-xl bg-[#FFF8EB] flex items-center justify-center text-[#4A3728]"
+            title="上個月"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-base font-black text-slate-900 dark:text-white font-mono">
+          <div className="font-mono-num text-lg sm:text-xl font-black text-[#4A3728] px-2">
             {year} 年 {month} 月
-          </span>
+          </div>
           <button
             onClick={handleNextMonth}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="sticker-btn-soft w-9 h-9 rounded-xl bg-[#FFF8EB] flex items-center justify-center text-[#4A3728]"
+            title="下個月"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-5 h-5" />
           </button>
         </div>
 
         <button
           onClick={handleGoToday}
-          className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+          className="sticker-btn-soft px-3.5 py-1.5 rounded-xl bg-white text-xs font-black text-[#4A3728]"
         >
           回到今天
         </button>
       </div>
 
       {viewMode === 'calendar' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Calendar Grid (2 cols) */}
-          <div className="lg:col-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-sm">
-            {/* Weekday headers: Mon - Sun */}
-            <div className="grid grid-cols-7 mb-2 text-center text-xs font-bold text-slate-400">
-              <span>週一</span>
-              <span>週二</span>
-              <span>週三</span>
-              <span>週四</span>
-              <span>週五</span>
-              <span className="text-pink-500">週六</span>
-              <span className="text-pink-500">週日</span>
+        /* SPLIT VIEW: SPIRAL CALENDAR (8/12) + RECEIPT PAD (4/12) */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* LEFT 8/12: SPIRAL-BOUND MONTHLY CALENDAR */}
+          <div className="lg:col-span-8 sketch-card bg-white p-4 sm:p-6 relative pt-8">
+            {/* Spiral Rings Along Top Edge */}
+            <div className="absolute -top-3 inset-x-8 flex justify-around pointer-events-none">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="w-3.5 h-6 rounded-full bg-[#FFF8EB] border-2 border-[#4A3728] shadow-[1px_1px_0px_#4A3728]"
+                />
+              ))}
             </div>
 
-            {/* Days Grid */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {calendarDays.map((item, idx) => {
-                const isSelected = item.dateStr === selectedDate;
-                const isToday = item.dateStr === new Date().toISOString().split('T')[0];
-                const daySummary = dailySummaryMap.get(item.dateStr);
-                const hasExpense = daySummary && daySummary.totalExpense > 0;
-                const hasIncome = daySummary && daySummary.totalIncome > 0;
+            {/* Weekday Header Row */}
+            <div className="grid grid-cols-7 gap-2 mb-3 text-center">
+              {['週一', '週二', '週三', '週四', '週五', '週六', '週日'].map((dayName, idx) => (
+                <div
+                  key={dayName}
+                  className={`py-1.5 text-xs sm:text-sm font-black rounded-xl ${
+                    idx >= 5
+                      ? 'text-[#FF2E7E] bg-[#FFF0F6]'
+                      : 'text-[#6E5646] bg-[#FFF9F0]'
+                  }`}
+                >
+                  {dayName}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar Days Grid */}
+            <div className="grid grid-cols-7 gap-2 sm:gap-2.5">
+              {calendarDays.map((cell, idx) => {
+                const isSelected = cell.dateStr === selectedDate;
+                const dayTxs = dailySummaryMap.get(cell.dateStr)?.txs || [];
+                const dayExp = dailySummaryMap.get(cell.dateStr)?.totalExpense || 0;
+                const dayInc = dailySummaryMap.get(cell.dateStr)?.totalIncome || 0;
 
                 return (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => setSelectedDate(item.dateStr)}
-                    className={`relative min-h-[68px] sm:min-h-[82px] p-1.5 sm:p-2 rounded-2xl border text-left flex flex-col justify-between transition-all group ${
-                      isSelected
-                        ? 'border-pink-500 bg-pink-500/10 dark:bg-pink-950/40 shadow-sm ring-2 ring-pink-500/30'
-                        : isToday
-                        ? 'border-purple-300 dark:border-purple-700 bg-purple-50/40 dark:bg-slate-800/80'
-                        : item.isCurrentMonth
-                        ? 'border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/80 dark:hover:bg-slate-800'
-                        : 'border-transparent opacity-40 bg-transparent'
+                    onClick={() => setSelectedDate(cell.dateStr)}
+                    className={`min-h-[82px] sm:min-h-[98px] p-2 rounded-2xl text-left flex flex-col justify-between transition-all cursor-pointer relative ${
+                      !cell.isCurrentMonth
+                        ? 'bg-[#FAF6F0]/60 border border-dashed border-[#E5D5C5] text-[#C2B2A3]'
+                        : isSelected
+                        ? 'bg-[#FFE3EE] border-[2.5px] border-[#FF2E7E] shadow-[3px_3px_0px_#FF2E7E] -translate-y-0.5'
+                        : 'bg-[#FFFDF9] border-2 border-[#E6D7C3] hover:border-[#4A3728] hover:bg-[#FFF9F2]'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between w-full">
                       <span
-                        className={`text-xs font-bold font-mono ${
+                        className={`font-mono-num text-xs sm:text-sm font-black ${
                           isSelected
-                            ? 'text-pink-600 dark:text-pink-400'
-                            : isToday
-                            ? 'text-purple-600 font-black'
-                            : item.isCurrentMonth
-                            ? 'text-slate-700 dark:text-slate-300'
-                            : 'text-slate-400'
+                            ? 'text-[#FF2E7E]'
+                            : !cell.isCurrentMonth
+                            ? 'text-[#C2B2A3]'
+                            : 'text-[#4A3728]'
                         }`}
                       >
-                        {item.dayNum}
+                        {cell.dayNum}
                       </span>
-
-                      {/* Small badge if idol spending occurred */}
-                      {daySummary?.hasIdol && (
-                        <span className="text-[10px]" title="包含追星應援消費">
-                          💖
-                        </span>
+                      {isSelected && (
+                        <span className="text-[11px] leading-none">📌</span>
                       )}
                     </div>
 
-                    {/* Expense summary indicator */}
-                    <div className="space-y-0.5 mt-1">
-                      {hasExpense && (
-                        <div className="text-[10px] font-mono font-bold text-rose-500 truncate">
-                          -NT${daySummary.totalExpense.toLocaleString()}
+                    {/* Hand-Drawn Stamps in Calendar Cell */}
+                    {dayTxs.length > 0 && (
+                      <div className="my-1 flex flex-wrap gap-1">
+                        {dayTxs.slice(0, 3).map(t => (
+                          <HandDrawnSticker
+                            key={t.id}
+                            sticker={t.detailedItem ? 'photocard' : 'sparkles'}
+                            size={20}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Compact Daily Net Pill */}
+                    <div className="w-full space-y-0.5">
+                      {dayExp > 0 && (
+                        <div className="font-mono-num text-[10px] font-black text-[#FF2E7E] bg-white/90 px-1 py-0.5 rounded-md border border-[#FF94B8] truncate">
+                          -${dayExp.toLocaleString()}
                         </div>
                       )}
-                      {hasIncome && (
-                        <div className="text-[10px] font-mono font-bold text-emerald-500 truncate">
-                          +NT${daySummary.totalIncome.toLocaleString()}
+                      {hasIncome(dayInc) && (
+                        <div className="font-mono-num text-[10px] font-black text-[#1E9E73] bg-[#E8FBF4] px-1 py-0.5 rounded-md border border-[#8CE0C2] truncate">
+                          +${dayInc.toLocaleString()}
                         </div>
                       )}
                     </div>
@@ -329,101 +345,126 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
             </div>
           </div>
 
-          {/* Selected Date Transaction Detail Panel (1 col) */}
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between">
-            <div>
-              {/* Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-xs font-bold text-slate-400">
-                    🗂️ 當日收支紀錄
-                  </span>
-                  <h4 className="text-base font-black text-slate-900 dark:text-white font-mono">
-                    {selectedDate}
-                  </h4>
-                </div>
+          {/* RIGHT 4/12: TEAR-OFF DAILY RECEIPT PAD */}
+          <div className="lg:col-span-4 sketch-card bg-[#FFFDF9] p-5 sm:p-6 relative flex flex-col justify-between min-h-[480px]">
+            <div
+              className="washi-tape-pink absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-5 rounded-sm"
+              style={{ transform: 'translateX(-50%) rotate(2deg)' }}
+            />
 
+            <div>
+              {/* Receipt Header */}
+              <div className="flex items-start justify-between gap-2 pb-4 border-b-2 border-dashed border-[#E6D7C3]">
+                <div>
+                  <div className="text-xs font-bold text-[#8C7365] mb-1">
+                    🧾 當日發票小票紀錄
+                  </div>
+                  <div className="font-mono-num text-xl font-black text-[#4A3728]">
+                    {selectedDate}
+                  </div>
+                </div>
                 <button
                   onClick={() => onOpenQuickTxWithDate(selectedDate)}
-                  className="px-3 py-1.5 text-xs font-bold text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/60 rounded-xl hover:bg-pink-100 transition-colors"
+                  className="sticker-btn-soft px-3.5 py-1.5 rounded-full bg-[#FFE3EC] text-[#FF2E7E] text-xs font-black"
                 >
-                  + 新增本日帳目
+                  + 新增
                 </button>
               </div>
 
-              {/* Day stats */}
-              <div className="grid grid-cols-2 gap-2 my-3 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                  <div className="text-[11px] text-slate-400">今日支出總計</div>
-                  <div className="font-mono font-black text-rose-500 mt-0.5 text-sm">
+              {/* Day Totals */}
+              <div className="grid grid-cols-2 gap-3 my-4">
+                <div className="p-3.5 rounded-2xl bg-[#FFF5F8] border-2 border-[#4A3728] shadow-[2px_2px_0px_#F5CEDC]">
+                  <div className="text-xs font-bold text-[#8C7365] mb-1">
+                    今日支出總計
+                  </div>
+                  <div className="font-mono-num text-lg font-black text-[#FF2E7E]">
                     NT$ {selectedDayInfo.totalExpense.toLocaleString()}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                  <div className="text-[11px] text-slate-400">今日收入總計</div>
-                  <div className="font-mono font-black text-emerald-500 mt-0.5 text-sm">
+                <div className="p-3.5 rounded-2xl bg-[#F2FBF7] border-2 border-[#4A3728] shadow-[2px_2px_0px_#C6EEDF]">
+                  <div className="text-xs font-bold text-[#8C7365] mb-1">
+                    今日收入總計
+                  </div>
+                  <div className="font-mono-num text-lg font-black text-[#1E9E73]">
                     NT$ {selectedDayInfo.totalIncome.toLocaleString()}
                   </div>
                 </div>
               </div>
 
               {/* Transactions List */}
-              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-96 overflow-y-auto">
-                {selectedDayInfo.txs.length > 0 ? (
-                  selectedDayInfo.txs.map(tx => {
+              {selectedDayInfo.txs.length === 0 ? (
+                <div className="py-12 px-4 text-center space-y-3 my-2 rounded-2xl border-2 border-dashed border-[#E6D7C3] bg-white/70">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-[#FFF5D6] border-2 border-[#4A3728] flex items-center justify-center text-xl shadow-[2px_2px_0px_#4A3728]">
+                    🌟
+                  </div>
+                  <div className="text-xs font-bold text-[#8C7365]">
+                    本日尚無收支明細
+                  </div>
+                  <button
+                    onClick={() => onOpenQuickTxWithDate(selectedDate)}
+                    className="text-xs font-black text-[#FF2E7E] hover:underline cursor-pointer inline-block"
+                  >
+                    點此記錄第一筆
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 mt-2 max-h-[380px] overflow-y-auto pr-1">
+                  {selectedDayInfo.txs.map(tx => {
                     const acc = accounts.find(a => a.id === tx.accountId);
                     return (
                       <div
                         key={tx.id}
-                        className="py-3 flex items-start justify-between gap-3 group"
+                        className="p-3.5 rounded-2xl bg-white border-2 border-[#4A3728] shadow-[2.5px_2.5px_0px_#E6D7C3] flex items-start justify-between gap-2.5 group"
                       >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                tx.categoryGroup === 'idol'
-                                  ? 'bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              {tx.category}
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              {acc?.name || '帳戶'}
-                            </span>
-                          </div>
-
-                          <p className="text-xs font-medium text-slate-800 dark:text-slate-200 mt-1">
-                            {tx.note || tx.category}
-                          </p>
-
-                          {tx.detailedItem && (
-                            <div className="mt-1 text-[11px] text-pink-600 dark:text-pink-400 flex items-center gap-1">
-                              <span>偶像商品：{tx.detailedItem.itemName}</span>
-                              {tx.detailedItem.linkedCollectibleId && (
-                                <span className="text-[9px] bg-pink-100 dark:bg-pink-950 px-1 rounded">已加入收藏</span>
-                              )}
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <HandDrawnSticker
+                            sticker={tx.detailedItem ? 'photocard' : 'sparkles'}
+                            size={36}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`text-[10px] font-black px-2 py-0.5 rounded-full border border-[#4A3728] ${
+                                  tx.categoryGroup === 'idol'
+                                    ? 'bg-[#FFE3EC] text-[#FF2E7E]'
+                                    : tx.type === 'income'
+                                    ? 'bg-[#E4FBF0] text-[#1E9E73]'
+                                    : 'bg-[#FFF3C4] text-[#4A3728]'
+                                }`}
+                              >
+                                {tx.category}
+                              </span>
+                              <span className="text-[10px] font-bold text-[#8C7365]">
+                                {acc?.name || '帳戶'}
+                              </span>
                             </div>
-                          )}
+                            <div className="text-xs font-black text-[#4A3728] mt-1 break-words">
+                              {tx.note || tx.category}
+                            </div>
+                            {tx.originalCurrency && tx.originalCurrency !== 'TWD' && tx.originalAmount && (
+                              <div className="mt-1 text-[10px] font-mono-num font-bold text-[#8A5CF5] bg-[#EFE6FF] px-2 py-0.5 rounded-md border border-[#4A3728] inline-block">
+                                🌐 {tx.originalCurrency} {tx.originalAmount.toLocaleString()} (匯率: {tx.exchangeRate?.toFixed(4)})
+                              </div>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="text-right">
-                          <div
-                            className={`font-mono font-bold text-sm tabular-nums ${
-                              tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+                        <div className="flex flex-col items-end shrink-0 gap-1">
+                          <span
+                            className={`font-mono-num text-xs font-black ${
+                              tx.type === 'income' ? 'text-[#1E9E73]' : 'text-[#FF2E7E]'
                             }`}
                           >
-                            {tx.type === 'income' ? '+' : '-'} NT${' '}
+                            {tx.type === 'income' ? '+' : '-'}NT${' '}
                             {tx.amount.toLocaleString()}
-                          </div>
-
+                          </span>
                           <button
                             onClick={() => {
                               if (window.confirm('確定要刪除這筆收支紀錄嗎？')) {
                                 deleteTransaction(tx.id);
                               }
                             }}
-                            className="text-slate-300 hover:text-rose-500 p-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="text-[#C2B2A3] hover:text-rose-500 p-1 cursor-pointer"
                             title="刪除"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -431,35 +472,31 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
                         </div>
                       </div>
                     );
-                  })
-                ) : (
-                  <div className="py-12 text-center text-xs text-slate-400 space-y-2">
-                    <p>本日尚無收支明細 🌟</p>
-                    <button
-                      onClick={() => onOpenQuickTxWithDate(selectedDate)}
-                      className="text-pink-500 font-semibold hover:underline"
-                    >
-                      點此為 {selectedDate} 記錄第一筆
-                    </button>
-                  </div>
-                )}
-              </div>
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t-2 border-dashed border-[#E6D7C3] pt-3 mt-4 flex items-center justify-between text-[11px] font-bold text-[#8C7365]">
+              <span>STAR WALK 經紀日記小票</span>
+              <span className="font-mono-num">
+                共 {selectedDayInfo.txs.length} 筆
+              </span>
             </div>
           </div>
         </div>
       ) : (
-        /* List & Search View Mode */
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-          {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        /* LIST VIEW */
+        <div className="sketch-card bg-white p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b-2 border-dashed border-[#E6D7C3] pb-4">
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#8C7365]" />
               <input
                 type="text"
                 placeholder="搜尋備註、分類、商品或藝人..."
                 value={searchKeyword}
                 onChange={e => setSearchKeyword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                className="w-full pl-9 pr-3 py-2 text-xs font-bold rounded-xl border-2 border-[#4A3728] bg-[#FFFDF7]"
               />
             </div>
 
@@ -475,10 +512,10 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
                 <button
                   key={f.id}
                   onClick={() => setFilterType(f.id)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all whitespace-nowrap ${
+                  className={`sticker-btn-soft px-3 py-1.5 rounded-full text-xs font-black whitespace-nowrap ${
                     filterType === f.id
-                      ? 'bg-pink-500 text-white border-pink-500'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                      ? 'bg-[#4A3728] text-white'
+                      : 'bg-white text-[#4A3728]'
                   }`}
                 >
                   {f.label}
@@ -487,46 +524,55 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
             </div>
           </div>
 
-          {/* List Table */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[600px] overflow-y-auto">
+          <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
             {filteredTransactions.length > 0 ? (
               filteredTransactions.map(tx => {
                 const acc = accounts.find(a => a.id === tx.accountId);
                 return (
                   <div
                     key={tx.id}
-                    className="py-3 flex items-center justify-between gap-4 group"
+                    className="p-3.5 rounded-2xl border-2 border-[#4A3728] bg-[#FFFDF7] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-mono text-slate-400 w-24">
-                        {tx.date}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${
-                          tx.type === 'income'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
-                            : tx.categoryGroup === 'idol'
-                            ? 'bg-pink-50 dark:bg-pink-950/60 text-pink-600'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        {tx.category}
-                      </span>
+                      <HandDrawnSticker
+                        sticker={tx.detailedItem ? 'photocard' : 'sparkles'}
+                        size={38}
+                      />
                       <div>
-                        <div className="text-xs font-semibold text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono-num text-xs font-bold text-[#8C7365]">
+                            {tx.date}
+                          </span>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full border border-[#4A3728] ${
+                              tx.type === 'income'
+                                ? 'bg-[#E4FBF0] text-[#1E9E73]'
+                                : tx.categoryGroup === 'idol'
+                                ? 'bg-[#FFE3EC] text-[#FF2E7E]'
+                                : 'bg-[#FFF3C4] text-[#4A3728]'
+                            }`}
+                          >
+                            {tx.category}
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-[#4A3728] mt-0.5">
                           {tx.note || tx.category}
                         </div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] font-bold text-[#8C7365]">
                           {acc?.name}
-                          {tx.detailedItem && ` · ${tx.detailedItem.groupName} ${tx.detailedItem.itemName}`}
+                          {tx.originalCurrency && tx.originalCurrency !== 'TWD' && tx.originalAmount && (
+                            <span className="ml-2 text-[#8A5CF5] font-mono-num font-bold">
+                              (🌐 {tx.originalCurrency} {tx.originalAmount.toLocaleString()})
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-dashed border-[#E5D5C5]">
                       <span
-                        className={`font-mono font-bold text-sm tabular-nums ${
-                          tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+                        className={`font-mono-num text-sm font-black ${
+                          tx.type === 'income' ? 'text-[#1E9E73]' : 'text-[#FF3B75]'
                         }`}
                       >
                         {tx.type === 'income' ? '+' : '-'} NT$ {tx.amount.toLocaleString()}
@@ -538,7 +584,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
                             deleteTransaction(tx.id);
                           }
                         }}
-                        className="text-slate-300 hover:text-rose-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-[#8C7365] hover:text-rose-500 p-1 cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -547,7 +593,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
                 );
               })
             ) : (
-              <p className="text-xs text-slate-400 py-8 text-center">
+              <p className="text-xs font-bold text-[#8C7365] py-8 text-center">
                 沒有符合條件的收支明細 🌟
               </p>
             )}
@@ -557,3 +603,7 @@ export const BookkeepingView: React.FC<BookkeepingViewProps> = ({ onOpenQuickTxW
     </div>
   );
 };
+
+function hasIncome(val: number) {
+  return val > 0;
+}

@@ -2,17 +2,12 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Gamepad2,
-  Sparkles,
   Award,
-  Shirt,
-  Compass,
   CheckCircle2,
   Lock,
-  ChevronRight,
-  TrendingUp,
-  Music,
-  Crown
+  Music
 } from 'lucide-react';
+import { HandDrawnSticker } from '../components/HandDrawnSticker';
 
 const AGENCY_STAGES = [
   {
@@ -57,20 +52,17 @@ const OUTFITS = [
   {
     id: '粉嫩帽T練舞服',
     name: '粉嫩帽T練舞服',
-    img: '/src/assets/images/idol_character_trainee_1793698980118.jpg',
-    unlocked: true
+    img: '/src/assets/images/idol_character_trainee_1793698980118.jpg'
   },
   {
     id: '星光閃耀打歌服',
     name: '星光閃耀打歌服',
-    img: '/src/assets/images/idol_character_stage_star_1793698980767.jpg',
-    unlocked: true
+    img: '/src/assets/images/idol_character_stage_star_1793698980767.jpg'
   },
   {
     id: '深藍天界女帝禮服',
     name: '深藍天界女帝禮服',
-    img: '/src/assets/images/idol_character_superstar_1793698981923.jpg',
-    unlocked: true
+    img: '/src/assets/images/idol_character_superstar_1793698981923.jpg'
   }
 ];
 
@@ -78,8 +70,6 @@ export const CharacterView: React.FC = () => {
   const {
     characterProfile,
     updateCharacterProfile,
-    dailyMissions,
-    completeDailyMission,
     achievements,
     advanceAgencyStage
   } = useApp();
@@ -102,32 +92,38 @@ export const CharacterView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Gamepad2 className="w-5 h-5 text-pink-500" />
-            <span>🎮 角色養成與經紀養成所</span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            解鎖造型衣櫥、成就徽章與偶像經紀成長支線（經驗值嚴格來自自律任務）
-          </p>
+      {/* Header Banner */}
+      <div className="sketch-card bg-[#FFF9E6] p-5 md:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative">
+        <div
+          className="washi-tape-pink absolute -top-3 left-10 w-28 h-5 rounded-sm"
+          style={{ transform: 'rotate(-2deg)' }}
+        />
+        <div className="flex items-center gap-3.5">
+          <HandDrawnSticker sticker="sparkles" size={48} />
+          <div>
+            <h2 className="text-xl md:text-2xl font-black text-[#4A3728]">
+              👗 角色養成與經紀養成所
+            </h2>
+            <p className="text-xs md:text-sm font-bold text-[#8C7365]">
+              解鎖造型衣櫥、成就徽章與偶像經紀成長支線！
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Main Character Showcase Card */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm overflow-hidden relative">
+      <div className="sketch-card bg-white p-6 relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-center gap-8">
           {/* Visual Avatar with current outfit */}
           <div className="relative shrink-0 flex flex-col items-center">
-            <div className="w-44 h-44 rounded-3xl overflow-hidden border-4 border-pink-400/80 shadow-2xl shadow-pink-500/20 bg-slate-100 dark:bg-slate-800 relative group">
+            <div className="w-44 h-44 rounded-3xl overflow-hidden border-4 border-[#4A3728] shadow-[4px_4px_0px_#4A3728] bg-[#FFEBF2] relative group p-1">
               <img
                 src={characterProfile.avatarUrl}
                 alt={characterProfile.name}
                 referrerPolicy="no-referrer"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
               />
-              <span className="absolute bottom-2 right-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-pink-600 text-white shadow-md">
+              <span className="absolute bottom-2 right-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-[#FF5C8A] text-white border-2 border-[#4A3728] shadow-xs">
                 Lv.{characterProfile.level}
               </span>
             </div>
@@ -144,10 +140,10 @@ export const CharacterView: React.FC = () => {
                     })
                   }
                   title={outfit.name}
-                  className={`w-9 h-9 rounded-xl overflow-hidden border-2 transition-all ${
+                  className={`w-9 h-9 rounded-xl overflow-hidden border-2 border-[#4A3728] transition-all cursor-pointer ${
                     characterProfile.currentOutfit === outfit.name
-                      ? 'border-pink-500 scale-110 shadow-sm ring-2 ring-pink-500/30'
-                      : 'border-transparent opacity-60 hover:opacity-100'
+                      ? 'scale-110 shadow-[2px_2px_0px_#4A3728] ring-2 ring-[#FF5C8A]'
+                      : 'opacity-60 hover:opacity-100'
                   }`}
                 >
                   <img src={outfit.img} alt={outfit.name} className="w-full h-full object-cover" />
@@ -165,44 +161,42 @@ export const CharacterView: React.FC = () => {
                     type="text"
                     value={nameInput}
                     onChange={e => setNameInput(e.target.value)}
-                    className="px-2.5 py-1 text-sm font-bold rounded-lg border border-pink-400 bg-white dark:bg-slate-800"
+                    className="px-3 py-1 text-sm font-black rounded-xl border-2 border-[#4A3728] bg-white text-[#4A3728]"
                   />
-                  <button type="submit" className="text-xs font-bold text-pink-500">
+                  <button type="submit" className="sticker-btn px-3 py-1 text-xs font-black text-white bg-[#FF5C8A]">
                     儲存
                   </button>
                 </form>
               ) : (
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  <h3 className="text-xl font-black text-[#4A3728]">
                     {characterProfile.name}
                   </h3>
                   <button
                     onClick={() => setIsEditingName(true)}
-                    className="text-xs text-slate-400 hover:text-pink-500"
+                    className="text-xs text-[#8C7365] hover:text-[#FF3B75] cursor-pointer"
                   >
                     ✏️
                   </button>
                 </div>
               )}
 
-              <span className="px-3 py-1 rounded-xl text-xs font-bold bg-pink-50 dark:bg-pink-950/60 text-pink-600 dark:text-pink-400 border border-pink-200 dark:border-pink-900/40">
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-[#FFE3EC] text-[#FF5C8A] border-2 border-[#4A3728]">
                 目前造型：{characterProfile.currentOutfit}
               </span>
             </div>
 
             {/* XP progress */}
             <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  經紀人等級進度
-                </span>
-                <span className="font-mono text-purple-600 dark:text-purple-400 font-bold">
+              <div className="flex justify-between text-xs font-bold mb-1">
+                <span className="text-[#8C7365]">經紀人等級進度</span>
+                <span className="font-mono-num text-[#8A5CF5] font-black">
                   {characterProfile.xp} / {xpMax} XP ({xpRate}%)
                 </span>
               </div>
-              <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div className="w-full h-3.5 rounded-full bg-[#F5EBE1] border-2 border-[#4A3728] overflow-hidden p-0.5">
                 <div
-                  className="h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full transition-all duration-500"
+                  className="h-full crayon-stripe-pink rounded-full transition-all duration-500"
                   style={{ width: `${xpRate}%` }}
                 />
               </div>
@@ -210,49 +204,47 @@ export const CharacterView: React.FC = () => {
 
             {/* Virtual Currency & Stage */}
             <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-              <div className="p-3 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40">
-                <span className="text-purple-600 dark:text-purple-400 text-[11px] block">
-                  ✨ 經紀星光幣（虛擬經營點數）
+              <div className="p-3.5 rounded-2xl bg-[#F2EAFF] border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728]">
+                <span className="text-[#8A5CF5] text-[11px] font-black block">
+                  ✨ 經紀星光幣（經營點數）
                 </span>
-                <span className="text-base font-black font-mono text-purple-700 dark:text-purple-300">
+                <span className="text-base font-black font-mono-num text-[#4A3728]">
                   {characterProfile.agencyPoints} P
                 </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">與真實金錢分開管理</p>
               </div>
 
-              <div className="p-3 rounded-2xl bg-pink-50/50 dark:bg-pink-950/30 border border-pink-100 dark:border-pink-900/40">
-                <span className="text-pink-600 dark:text-pink-400 text-[11px] block">
+              <div className="p-3.5 rounded-2xl bg-[#FFEBF2] border-2 border-[#4A3728] shadow-[2px_2px_0px_#4A3728]">
+                <span className="text-[#FF5C8A] text-[11px] font-black block">
                   🏢 偶像事務所階段
                 </span>
-                <span className="text-sm font-black text-pink-700 dark:text-pink-300 truncate block">
+                <span className="text-sm font-black text-[#4A3728] truncate block">
                   {currentAgencyStage.name}
                 </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">支線不影響演唱會存錢</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Agency Sub-Game Section: 通告中心與舞台養成 */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+      {/* Agency Sub-Game Section */}
+      <div className="sketch-card bg-white p-6 relative">
+        <div className="flex items-center justify-between pb-3 border-b-2 border-dashed border-[#E6D7C3]">
           <div>
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Music className="w-4 h-4 text-purple-500" />
-              <span>🎬 偶像經紀通告養成支線（可選玩法）</span>
+            <h4 className="font-black text-sm text-[#4A3728] flex items-center gap-2">
+              <Music className="w-4 h-4 text-[#8A5CF5]" />
+              <span>🎬 偶像經紀通告養成支線</span>
             </h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              消耗日常自律任務獲得的經紀星光幣，陪伴偶像從小練習室一步步解鎖世界巨蛋舞台！
+            <p className="text-[11px] font-bold text-[#8C7365] mt-0.5">
+              陪伴偶像從小練習室一步步解鎖世界巨蛋舞台！
             </p>
           </div>
 
           {characterProfile.agencyStageIndex < AGENCY_STAGES.length - 1 && (
             <button
               onClick={advanceAgencyStage}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-all"
+              className="sticker-btn px-4 py-1.5 text-xs font-black text-white bg-[#8A5CF5] rounded-full"
             >
-              進階下一個事務所舞台 🚀
+              進階下一個舞台 🚀
             </button>
           )}
         </div>
@@ -265,32 +257,32 @@ export const CharacterView: React.FC = () => {
             return (
               <div
                 key={i}
-                className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all ${
+                className={`p-3.5 rounded-2xl border-2 border-[#4A3728] text-left flex flex-col justify-between transition-all ${
                   isCurrent
-                    ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/20 shadow-xs'
+                    ? 'bg-[#FFE3EC] shadow-[3px_3px_0px_#4A3728] -translate-y-0.5'
                     : isUnlocked
-                    ? 'border-emerald-300 dark:border-emerald-900/60 bg-emerald-50/30 dark:bg-emerald-950/20'
-                    : 'border-slate-200 dark:border-slate-800 opacity-60 bg-slate-50 dark:bg-slate-800/40'
+                    ? 'bg-[#E4FBF0]'
+                    : 'bg-[#FFFDF7] opacity-60'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400">STAGE 0{i + 1}</span>
+                    <span className="text-[10px] font-black font-mono-num text-[#8C7365]">STAGE 0{i + 1}</span>
                     {isUnlocked ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#1E9E73] stroke-[3]" />
                     ) : (
-                      <Lock className="w-3 h-3 text-slate-400" />
+                      <Lock className="w-3 h-3 text-[#8C7365]" />
                     )}
                   </div>
-                  <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+                  <h5 className="text-xs font-black text-[#4A3728] mt-1">
                     {stg.name}
                   </h5>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                  <p className="text-[10px] font-bold text-[#8C7365] mt-1 line-clamp-2">
                     {stg.desc}
                   </p>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] text-pink-600 dark:text-pink-400 font-medium">
+                <div className="mt-3 pt-2 border-t border-dashed border-[#E6D7C3] text-[10px] text-[#FF5C8A] font-black">
                   {stg.bonus}
                 </div>
               </div>
@@ -300,48 +292,48 @@ export const CharacterView: React.FC = () => {
       </div>
 
       {/* Achievement Hall */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="sketch-card bg-white p-6 relative">
+        <div className="flex items-center justify-between pb-3 border-b-2 border-dashed border-[#E6D7C3]">
           <div className="flex items-center gap-2">
-            <Award className="w-4 h-4 text-pink-500" />
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+            <Award className="w-4 h-4 text-[#FF5C8A]" />
+            <h4 className="font-black text-sm text-[#4A3728]">
               🏆 星光成就館
             </h4>
           </div>
-          <span className="text-xs text-slate-400">
-            解鎖成就保留永久紀錄
+          <span className="text-xs font-bold text-[#8C7365]">
+            成就記錄永久保存
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mt-4">
           {achievements.map(ach => (
             <div
               key={ach.id}
-              className={`p-4 rounded-2xl border flex items-center gap-3 transition-all ${
+              className={`p-4 rounded-2xl border-2 border-[#4A3728] flex items-center gap-3 transition-all ${
                 ach.isUnlocked
-                  ? 'border-pink-200 dark:border-pink-900/50 bg-pink-50/30 dark:bg-pink-950/20'
-                  : 'border-slate-200 dark:border-slate-800 opacity-60 bg-slate-50 dark:bg-slate-800/40'
+                  ? 'bg-[#FFEBF2] shadow-[2.5px_2.5px_0px_#4A3728]'
+                  : 'bg-[#FFFDF7] opacity-60'
               }`}
             >
-              <div className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xl shrink-0 shadow-xs">
+              <div className="w-10 h-10 rounded-2xl bg-white border-2 border-[#4A3728] flex items-center justify-center text-xl shrink-0 shadow-xs">
                 {ach.icon}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  <h5 className="text-xs font-black text-[#4A3728] truncate">
                     {ach.title}
                   </h5>
                   {ach.isUnlocked && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-500 text-white rounded-md">
+                    <span className="text-[9px] font-black px-1.5 py-0.2 bg-[#1E9E73] text-white rounded-md">
                       已達成
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                <p className="text-[11px] font-bold text-[#8C7365] mt-0.5 truncate">
                   {ach.description}
                 </p>
                 {ach.unlockedAt && (
-                  <span className="text-[9px] text-slate-400 font-mono">
+                  <span className="text-[9px] text-[#8C7365] font-mono-num">
                     達成日期：{ach.unlockedAt}
                   </span>
                 )}
