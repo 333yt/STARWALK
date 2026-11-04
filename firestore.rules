@@ -1,25 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // 預設拒絕所有存取（Default Deny）
+    // Default deny all access
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // 測試連線健康探針
-    match /test/connection {
-      allow read: if true;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // 會員個人檔案與所有子集合
-    // 嚴格落實 UID 隔離：只有登入者本人能讀寫自己的資料，B 使用者無法查看或修改 A 使用者的私人帳目與收藏
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
 
-      // 包含 appState/current 以及所有子集合（accounts, transactions, concerts, collectibles 等）
+    // Health check endpoint for verifying connectivity
+    match /test/connection {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Strict user UID isolation: each user can only read and write their own documents and subcollections
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
       match /{subcollection=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
     }
   }

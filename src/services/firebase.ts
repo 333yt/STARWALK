@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseConfigObject {
   apiKey: string;
@@ -10,12 +11,12 @@ export interface FirebaseConfigObject {
   messagingSenderId?: string;
   appId: string;
   measurementId?: string;
+  firestoreDatabaseId?: string;
 }
 
 const STORAGE_KEY_FIREBASE_CONFIG = 'STAR_WALK_FIREBASE_CONFIG';
 
-export function getStoredFirebaseConfig(): FirebaseConfigObject | null {
-  // 1. Check localStorage first
+export function getStoredFirebaseConfig(): FirebaseConfigObject {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FIREBASE_CONFIG);
     if (raw) {
@@ -28,22 +29,7 @@ export function getStoredFirebaseConfig(): FirebaseConfigObject | null {
     console.error('Failed to parse stored Firebase config', e);
   }
 
-  // 2. Fallback to Vite environment variables
-  const envConfig: FirebaseConfigObject = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
-  };
-
-  if (envConfig.apiKey && envConfig.projectId) {
-    return envConfig;
-  }
-
-  return null;
+  return firebaseConfig as FirebaseConfigObject;
 }
 
 export function saveStoredFirebaseConfig(config: FirebaseConfigObject): void {
@@ -54,41 +40,33 @@ export function clearStoredFirebaseConfig(): void {
   localStorage.removeItem(STORAGE_KEY_FIREBASE_CONFIG);
 }
 
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let isConfigured = false;
+const activeConfig = getStoredFirebaseConfig();
 
-const initialConfig = getStoredFirebaseConfig();
+const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(activeConfig);
+// CRITICAL: Must pass firestoreDatabaseId if provided in config, otherwise named db won't connect
+const db: Firestore = getFirestore(app, activeConfig.firestoreDatabaseId || firebaseConfig.firestoreDatabaseId);
+const auth: Auth = getAuth(app);
+const isConfigured = true;
 
-if (initialConfig && initialConfig.apiKey && initialConfig.projectId) {
-  try {
-    app = getApps().length > 0 ? getApp() : initializeApp(initialConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    isConfigured = true;
-  } catch (err) {
-    console.warn('Firebase initialization warning:', err);
-  }
-}
-
-export const googleProvider = new GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export { app, auth, db, isConfigured };
-
-// Test connection helper
+// Validate connection to Firestore on boot (per skill requirement)
 export async function testFirestoreConnection(): Promise<boolean> {
-  if (!db) return false;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline');
+      console.warn('Firebase client is offline. Please check network/Firebase configuration.');
       return false;
     }
-    // Any other error (like permission denied) still confirms server reachability
+    // Any other status (including permission or exists) confirms reachability
     return true;
   }
 }
+
+// Auto test on initial load
+testFirestoreConnection().catch(() => {});
+
+export { app, auth, db, isConfigured, googleProvider };

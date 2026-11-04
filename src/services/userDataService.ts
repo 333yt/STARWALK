@@ -65,9 +65,12 @@ export function getDemoInitialUserState(): AppStateData {
   };
 }
 
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+
 // Load user state from Firestore
 export async function loadUserDataFromFirestore(uid: string): Promise<AppStateData | null> {
   if (!db) return null;
+  const path = `users/${uid}/appState/current`;
   try {
     const userStateRef = doc(db, 'users', uid, 'appState', 'current');
     const snap = await getDoc(userStateRef);
@@ -77,13 +80,14 @@ export async function loadUserDataFromFirestore(uid: string): Promise<AppStateDa
     return null;
   } catch (err) {
     console.error('Failed to load user data from Firestore:', err);
-    throw err;
+    handleFirestoreError(err, OperationType.GET, path);
   }
 }
 
 // Save user state to Firestore
 export async function saveUserDataToFirestore(uid: string, data: AppStateData): Promise<void> {
   if (!db) return;
+  const path = `users/${uid}/appState/current`;
   try {
     const userStateRef = doc(db, 'users', uid, 'appState', 'current');
     await setDoc(userStateRef, {
@@ -92,6 +96,6 @@ export async function saveUserDataToFirestore(uid: string, data: AppStateData): 
     });
   } catch (err) {
     console.error('Failed to save user data to Firestore:', err);
-    throw err;
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }

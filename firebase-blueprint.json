@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Individual user profile document with nickname and avatar",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Firebase Auth UID"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "User Google or email address"
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "User agent nickname"
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 65536,
+          "description": "Profile picture URL or compressed base64 avatar"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Timestamp when profile was created"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp when profile was last updated"
+        }
+      },
+      "required": ["uid"]
+    },
+    "AppState": {
+      "title": "AppState",
+      "description": "User application state data including accounts, transactions, concerts, and collectibles",
+      "type": "object",
+      "properties": {
+        "accounts": {
+          "type": "array",
+          "description": "Financial accounts list"
+        },
+        "transactions": {
+          "type": "array",
+          "description": "Bookkeeping transactions list"
+        },
+        "monthlyBudgets": {
+          "type": "object",
+          "description": "Monthly budget records"
+        },
+        "concerts": {
+          "type": "array",
+          "description": "Concert goals and fund tracking"
+        },
+        "concertTasks": {
+          "type": "array",
+          "description": "Concert preparation tasks"
+        },
+        "fundAllocations": {
+          "type": "array",
+          "description": "Fund allocation records"
+        },
+        "collectibles": {
+          "type": "array",
+          "description": "K-pop and idol collectibles and photocards"
+        },
+        "dailyMissions": {
+          "type": "array",
+          "description": "Daily agent missions"
+        },
+        "achievements": {
+          "type": "array",
+          "description": "Unlocked achievements list"
+        },
+        "characterProfile": {
+          "type": "object",
+          "description": "Idol character status and unlocked outfits"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp when state was last saved"
+        }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document isolated by UID"
+    },
+    "/users/{userId}/appState/current": {
+      "schema": "AppState",
+      "description": "User full persistent bookkeeping and concert data document"
+    }
+  }
+}
