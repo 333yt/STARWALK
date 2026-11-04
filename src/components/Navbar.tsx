@@ -24,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQuickTx }) => {
   const {
     theme,
     setTheme,
+    exitToCover,
     isSoundEnabled,
     toggleSound,
     setIsFirebaseModalOpen,
@@ -44,9 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQuickTx }) => {
   } = useAuth();
 
   const themeOptions: { id: Theme; label: string; icon: string }[] = [
-    { id: 'starlight', label: '✨ 星光簡約風', icon: '✨' },
-    { id: 'pink', label: '🌸 夢幻應援粉', icon: '🌸' },
-    { id: 'midnight', label: '🌙 午夜舞台暗色風', icon: '🌙' }
+    { id: 'starlight', label: '✨ 簡約風', icon: '✨' },
+    { id: 'midnight', label: '🌙 暗色風', icon: '🌙' }
   ];
 
   const memberName = userProfile?.displayName || user?.displayName || '經紀人';
@@ -165,6 +165,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQuickTx }) => {
                   {theme === opt.id && <span className="text-[10px]">✓</span>}
                 </button>
               ))}
+
+              <div className="my-1 border-t border-[#4A3728]/15" />
+              <button
+                onClick={exitToCover}
+                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-[#8C7365] hover:text-[#FF5C8A] hover:bg-[#FFF0F5] rounded-xl transition-colors flex items-center gap-1.5"
+              >
+                <span>🏠 返回封面頁</span>
+              </button>
             </div>
           </div>
 

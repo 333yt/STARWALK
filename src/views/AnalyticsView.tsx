@@ -5,12 +5,28 @@ import {
   Target,
   AlertTriangle,
   CheckCircle2,
-  ShieldAlert
+  ShieldAlert,
+  Wallet,
+  Plus,
+  ArrowRightLeft,
+  Edit3,
+  Trash2,
+  Globe
 } from 'lucide-react';
+import { Account, CurrencyCode } from '../types';
+import { AccountModal } from '../components/AccountModal';
+import { CurrencyTransferModal } from '../components/CurrencyTransferModal';
+import { getCurrencyConfig } from '../services/currencyService';
 import { HandDrawnSticker } from '../components/HandDrawnSticker';
 
 export const AnalyticsView: React.FC = () => {
   const {
+    accounts,
+    transfers,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    transferCurrency,
     currentYearMonth,
     monthTransactions,
     monthTotalIncome,
@@ -21,12 +37,18 @@ export const AnalyticsView: React.FC = () => {
     monthBudgetRemaining,
     monthBudgetUsagePercent,
     setMonthlyBudgetLimit,
+    totalLiquidAssets,
     totalAllocatedFunds,
     availableUnallocatedFunds
   } = useApp();
 
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(currentMonthBudgetLimit));
+
+  // Multi-currency account modals
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   // Category breakdown
   const categoryBreakdown = useMemo(() => {
@@ -392,6 +414,142 @@ export const AnalyticsView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Multi-Currency Asset Accounts & Exchange Section */}
+      <div className="sketch-card bg-white dark:bg-slate-900 p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b-2 border-dashed border-[#E6D7C3] dark:border-slate-800 gap-3">
+          <div>
+            <h3 className="font-black text-base text-[#4A3728] dark:text-slate-100 flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-[#FF5C8A]" />
+              <span>多幣種資產帳戶與現金錢包管理</span>
+            </h3>
+            <p className="text-xs font-bold text-[#8C7365] dark:text-slate-400 mt-0.5">
+              各帳戶獨立原幣餘額，信用卡消費不重複扣款，即時轉換台幣淨資產 NT$ {totalLiquidAssets.toLocaleString()}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsTransferModalOpen(true)}
+              className="sticker-btn px-3.5 py-2 rounded-full bg-[#8A5CF5] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>外幣兌換與轉帳</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingAccount(null);
+                setIsAccountModalOpen(true);
+              }}
+              className="sticker-btn px-3.5 py-2 rounded-full bg-[#FF5C8A] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span>新增資產帳戶</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Account Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {accounts.map(acc => {
+            const curr = acc.currency || 'TWD';
+            const config = getCurrencyConfig(curr);
+            const rate = config.defaultRateToTWD || 1;
+            const twdEquivalent = Math.round(acc.balance * rate);
+
+            return (
+              <div
+                key={acc.id}
+                className="p-4 rounded-2xl bg-[#FFFDF7] dark:bg-slate-800 border-2 border-[#4A3728] dark:border-slate-700 shadow-[3px_3px_0px_#4A3728] dark:shadow-[3px_3px_0px_#1e293b] flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{config.flag}</span>
+                    <div>
+                      <h4 className="font-black text-sm text-[#4A3728] dark:text-slate-100">
+                        {acc.name}
+                      </h4>
+                      <span className="text-[10px] font-bold text-[#8C7365] dark:text-slate-400">
+                        {acc.type === 'credit_card'
+                          ? '💳 信用卡 (待繳帳單)'
+                          : acc.type === 'cash'
+                          ? '💵 現金錢包'
+                          : '🏦 銀行帳戶'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingAccount(acc);
+                        setIsAccountModalOpen(true);
+                      }}
+                      className="p-1 rounded-lg hover:bg-[#FFE3EC] dark:hover:bg-slate-700 text-[#8C7365] dark:text-slate-300"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    {accounts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => deleteAccount(acc.id)}
+                        className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-500"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-dashed border-[#E6D7C3] dark:border-slate-700 flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-[#8C7365] dark:text-slate-400">
+                    原幣餘額
+                  </span>
+                  <div className="text-right">
+                    <span className="font-mono-num font-black text-base text-[#4A3728] dark:text-slate-100">
+                      {config.symbol} {acc.balance.toLocaleString()} {curr}
+                    </span>
+                    {curr !== 'TWD' && (
+                      <div className="text-[10px] font-mono-num font-bold text-[#8C7365] dark:text-slate-400">
+                        ≈ NT$ {twdEquivalent.toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Account Modal */}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => {
+          setIsAccountModalOpen(false);
+          setEditingAccount(null);
+        }}
+        account={editingAccount}
+        onSaveAccount={(accData, id) => {
+          if (id) {
+            updateAccount(id, accData);
+          } else {
+            addAccount(accData as Omit<Account, 'id'>);
+          }
+        }}
+      />
+
+      {/* Currency Transfer Modal */}
+      <CurrencyTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        accounts={accounts}
+        onTransfer={transferCurrency}
+      />
     </div>
   );
 };

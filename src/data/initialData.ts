@@ -14,9 +14,10 @@ import {
 export const INITIAL_ACCOUNTS: Account[] = [
   {
     id: 'acc_cash',
-    name: '💵 現金錢包',
+    name: '💵 台幣現金錢包',
     type: 'cash',
     balance: 4500,
+    currency: 'TWD',
     note: '隨身現金與應援零錢'
   },
   {
@@ -24,13 +25,31 @@ export const INITIAL_ACCOUNTS: Account[] = [
     name: '🏦 國泰世華銀行',
     type: 'bank',
     balance: 78500,
+    currency: 'TWD',
     note: '主帳戶與儲蓄基金'
+  },
+  {
+    id: 'acc_jpy',
+    name: '🇯🇵 日圓現金錢包',
+    type: 'cash',
+    balance: 50000,
+    currency: 'JPY',
+    note: '日本東京巨蛋遠征備用現金'
+  },
+  {
+    id: 'acc_cny',
+    name: '🇨🇳 支付寶 / 微信錢包',
+    type: 'cash',
+    balance: 1500,
+    currency: 'CNY',
+    note: '周邊代購與飯圈集資'
   },
   {
     id: 'acc_linepay',
     name: '📱 LINE Pay (綁定銀行)',
     type: 'line_pay',
     balance: 2800,
+    currency: 'TWD',
     cardPaymentSourceId: 'acc_bank',
     note: '日常手機感應支付'
   },
@@ -38,7 +57,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
     id: 'acc_card',
     name: '💳 玉山 U Bear 信用卡',
     type: 'credit_card',
-    balance: 5200, // Current bill to be settled
+    balance: 5200,
+    currency: 'TWD',
     cardPaymentSourceId: 'acc_bank',
     note: '購票與海外代購'
   }

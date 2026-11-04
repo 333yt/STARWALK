@@ -1,4 +1,4 @@
-export type Theme = 'starlight' | 'pink' | 'midnight';
+export type Theme = 'starlight' | 'midnight';
 
 export type TxType = 'expense' | 'income';
 
@@ -37,7 +37,8 @@ export interface Account {
   id: string;
   name: string;
   type: AccountType;
-  balance: number; // For credit card, positive represents unpaid balance or credit limit
+  balance: number; // For credit card, positive represents unpaid balance or credit limit; for cash/bank, balance in native currency
+  currency?: CurrencyCode; // Currency code (defaults to TWD)
   cardPaymentSourceId?: string; // If line_pay or credit card pays via a bank account
   note?: string;
 }
@@ -102,6 +103,21 @@ export interface Transaction {
   exchangeRateTime?: string;
 }
 
+export interface AccountTransferRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  fromAccountId: string;
+  fromAmount: number;
+  fromCurrency: CurrencyCode;
+  toAccountId: string;
+  toAmount: number;
+  toCurrency: CurrencyCode;
+  exchangeRate: number; // 1 fromCurrency = exchangeRate toCurrency
+  feeTWD?: number;
+  note: string;
+  createdAt: number;
+}
+
 export interface MonthlyBudget {
   yearMonth: string; // YYYY-MM
   budgetLimit: number;
@@ -109,11 +125,17 @@ export interface MonthlyBudget {
 
 export interface ConcertBudgetPlan {
   ticket: number;
+  ticketCurrency?: CurrencyCode;
   travel: number;
+  travelCurrency?: CurrencyCode;
   lodging: number;
+  lodgingCurrency?: CurrencyCode;
   merchandise: number;
+  merchandiseCurrency?: CurrencyCode;
   other: number;
-  total: number;
+  otherCurrency?: CurrencyCode;
+  total: number; // Total converted TWD estimate
+  mainCurrency?: CurrencyCode; // Main default currency for concert
 }
 
 export interface ConcertTask {
@@ -129,7 +151,10 @@ export interface FundAllocationRecord {
   id: string;
   concertId: string;
   type: 'allocate' | 'withdraw';
-  amount: number;
+  amount: number; // Amount in allocation currency
+  currency?: CurrencyCode;
+  twdEquivalent?: number; // TWD value at allocation
+  accountId?: string; // Source account for allocation
   date: string; // YYYY-MM-DD
   note: string;
   createdAt: number;
@@ -154,7 +179,7 @@ export interface ConcertGoal {
   city: string;
   venue: string;
   budgetPlan: ConcertBudgetPlan;
-  allocatedFund: number;
+  allocatedFund: number; // Total allocated funds in TWD equivalent
   coverImage: string;
   notes: string;
   status: 'planning' | 'saving' | 'ready' | 'completed';
@@ -234,6 +259,7 @@ export interface UserProfile {
 
 export interface AppStateData {
   accounts: Account[];
+  transfers?: AccountTransferRecord[];
   transactions: Transaction[];
   monthlyBudgets: Record<string, number>;
   concerts: ConcertGoal[];

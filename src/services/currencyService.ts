@@ -132,3 +132,68 @@ export function formatMultiCurrencyDisplay(
   const config = getCurrencyConfig(originalCurrency);
   return `${config.symbol} ${originalAmount.toLocaleString()} (NT$ ${Math.round(twdAmount).toLocaleString()})`;
 }
+
+export interface CurrencySumItem {
+  code: CurrencyCode;
+  symbol: string;
+  flag: string;
+  name: string;
+  amount: number;
+  twdAmount: number;
+}
+
+export interface BudgetCurrencyBreakdown {
+  isSingleCurrency: boolean;
+  sums: CurrencySumItem[];
+  totalTWD: number;
+}
+
+/**
+ * Groups concert budget line items by currency and sums amounts separately per currency.
+ * If all items use the same currency, isSingleCurrency is true.
+ */
+export function calculateBudgetCurrencySums(
+  items: { amount: number; currency?: CurrencyCode }[],
+  mainCurrency: CurrencyCode = 'TWD'
+): BudgetCurrencyBreakdown {
+  const sumMap = new Map<CurrencyCode, { amount: number; twdAmount: number }>();
+  let totalTWD = 0;
+
+  items.forEach(item => {
+    const amt = item.amount || 0;
+    const curr = item.currency || mainCurrency;
+    const config = getCurrencyConfig(curr);
+    const twd = Math.round(amt * (config.defaultRateToTWD || 1));
+    totalTWD += twd;
+
+    if (amt > 0) {
+      const existing = sumMap.get(curr) || { amount: 0, twdAmount: 0 };
+      existing.amount += amt;
+      existing.twdAmount += twd;
+      sumMap.set(curr, existing);
+    }
+  });
+
+  if (sumMap.size === 0) {
+    sumMap.set(mainCurrency, { amount: 0, twdAmount: 0 });
+  }
+
+  const sums: CurrencySumItem[] = [];
+  sumMap.forEach((val, code) => {
+    const config = getCurrencyConfig(code);
+    sums.push({
+      code,
+      symbol: config.symbol,
+      flag: config.flag,
+      name: config.name,
+      amount: val.amount,
+      twdAmount: val.twdAmount
+    });
+  });
+
+  return {
+    isSingleCurrency: sums.length <= 1,
+    sums,
+    totalTWD
+  };
+}

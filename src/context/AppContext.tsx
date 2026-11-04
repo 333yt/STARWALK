@@ -3,6 +3,8 @@ import {
   Theme,
   Account,
   Transaction,
+  AccountTransferRecord,
+  CurrencyCode,
   MonthlyBudget,
   ConcertGoal,
   ConcertTask,
@@ -34,9 +36,13 @@ import {
   loadUserDataFromFirestore,
   saveUserDataToFirestore
 } from '../services/userDataService';
+import { getCurrencyConfig } from '../services/currencyService';
 
 interface AppContextType {
-  // Theme & Mode
+  // Theme & Cover Screen Mode
+  hasEntered: boolean;
+  enterApp: () => void;
+  exitToCover: () => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
   activeTab: string;
@@ -62,6 +68,7 @@ interface AppContextType {
 
   // State
   accounts: Account[];
+  transfers: AccountTransferRecord[];
   transactions: Transaction[];
   monthlyBudgets: Record<string, number>; // yearMonth -> limit
   concerts: ConcertGoal[];
@@ -71,6 +78,19 @@ interface AppContextType {
   dailyMissions: DailyMission[];
   achievements: Achievement[];
   characterProfile: CharacterProfile;
+
+  // Actions - Account Management & Transfers
+  addAccount: (accData: Omit<Account, 'id'>) => void;
+  updateAccount: (id: string, updates: Partial<Account>) => void;
+  deleteAccount: (id: string) => void;
+  transferCurrency: (
+    fromAccountId: string,
+    toAccountId: string,
+    fromAmount: number,
+    toAmount: number,
+    feeTWD?: number,
+    note?: string
+  ) => { success: boolean; message: string };
 
   // Calculated Metrics
   monthTransactions: Transaction[];
@@ -103,8 +123,19 @@ interface AppContextType {
   toggleArchiveConcert: (id: string) => void;
 
   // Actions - Fund Allocation
-  allocateConcertFund: (concertId: string, amount: number, note?: string) => { success: boolean; message: string };
-  withdrawConcertFund: (concertId: string, amount: number, note?: string) => { success: boolean; message: string };
+  allocateConcertFund: (
+    concertId: string,
+    amount: number,
+    currency?: CurrencyCode,
+    accountId?: string,
+    note?: string
+  ) => { success: boolean; message: string };
+  withdrawConcertFund: (
+    concertId: string,
+    amount: number,
+    currency?: CurrencyCode,
+    note?: string
+  ) => { success: boolean; message: string };
 
   // Actions - Concert Tasks
   toggleConcertTask: (taskId: string) => void;
@@ -160,11 +191,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentUid = user?.uid || null;
   const storagePrefix = getStoragePrefix(currentUid);
 
-  // Theme state (global)
+  // Cover screen entry state
+  const [hasEntered, setHasEntered] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('STAR_WALK_HAS_ENTERED') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const enterApp = () => {
+    setHasEntered(true);
+    try {
+      sessionStorage.setItem('STAR_WALK_HAS_ENTERED', 'true');
+    } catch (e) {
+      console.warn(e);
+    }
+    sound.playSparkle();
+  };
+
+  const exitToCover = () => {
+    setHasEntered(false);
+    try {
+      sessionStorage.removeItem('STAR_WALK_HAS_ENTERED');
+    } catch (e) {
+      console.warn(e);
+    }
+    sound.playClick();
+  };
+
+  // Theme state (global) - limited to 'starlight' and 'midnight'
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
       const saved = localStorage.getItem('STAR_WALK_GLOBAL_THEME');
-      return (saved as Theme) || 'starlight';
+      return saved === 'midnight' ? 'midnight' : 'starlight';
     } catch {
       return 'starlight';
     }
@@ -197,6 +257,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Entities initialized from storagePrefix
   const [accounts, setAccounts] = useState<Account[]>(() =>
     loadScopedStorage(storagePrefix, 'ACCOUNTS', defaultClean.accounts)
+  );
+  const [transfers, setTransfers] = useState<AccountTransferRecord[]>(() =>
+    loadScopedStorage(storagePrefix, 'TRANSFERS', [])
   );
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     loadScopedStorage(storagePrefix, 'TRANSACTIONS', defaultClean.transactions)
@@ -446,8 +509,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     root.classList.remove('theme-starlight', 'theme-pink', 'theme-midnight', 'dark');
     if (theme === 'midnight') {
       root.classList.add('dark', 'theme-midnight');
-    } else if (theme === 'pink') {
-      root.classList.add('theme-pink');
     } else {
       root.classList.add('theme-starlight');
     }
@@ -526,13 +587,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return Math.min(100, Math.round((monthTotalExpense / currentMonthBudgetLimit) * 100));
   }, [monthTotalExpense, currentMonthBudgetLimit]);
 
-  // Liquid assets & concert funds
+  // Liquid assets & concert funds (multi-currency converted to TWD)
   const totalLiquidAssets = useMemo(() => {
-    return accounts.reduce((acc, account) => {
+    return accounts.reduce((accSum, account) => {
+      const curr = account.currency || 'TWD';
+      const rate = getCurrencyConfig(curr).defaultRateToTWD || 1;
+      const twdVal = account.balance * rate;
+
       if (account.type === 'credit_card') {
-        return acc - account.balance;
+        return accSum - twdVal;
       }
-      return acc + account.balance;
+      return accSum + twdVal;
     }, 0);
   }, [accounts]);
 
@@ -547,6 +612,103 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isTodayRecorded = useMemo(() => {
     return transactions.some(tx => tx.date === todayStr);
   }, [transactions, todayStr]);
+
+  // Account Management & Transfers
+  const addAccount = (accData: Omit<Account, 'id'>) => {
+    const newId = 'acc_' + Date.now();
+    const newAccount: Account = {
+      ...accData,
+      id: newId,
+      currency: accData.currency || 'TWD'
+    };
+    const nextAccounts = [...accounts, newAccount];
+    setAccounts(nextAccounts);
+    syncToFirestore({ accounts: nextAccounts });
+    sound.playSparkle();
+  };
+
+  const updateAccount = (id: string, updates: Partial<Account>) => {
+    const nextAccounts = accounts.map(a => (a.id === id ? { ...a, ...updates } : a));
+    setAccounts(nextAccounts);
+    syncToFirestore({ accounts: nextAccounts });
+    sound.playClick();
+  };
+
+  const deleteAccount = (id: string) => {
+    if (accounts.length <= 1) {
+      alert('至少需保留一個資產帳戶！');
+      return;
+    }
+    const nextAccounts = accounts.filter(a => a.id !== id);
+    setAccounts(nextAccounts);
+    syncToFirestore({ accounts: nextAccounts });
+    sound.playClick();
+  };
+
+  const transferCurrency = (
+    fromAccountId: string,
+    toAccountId: string,
+    fromAmount: number,
+    toAmount: number,
+    feeTWD: number = 0,
+    note: string = '外幣兌換與帳戶轉帳'
+  ) => {
+    const fromAcc = accounts.find(a => a.id === fromAccountId);
+    const toAcc = accounts.find(a => a.id === toAccountId);
+    if (!fromAcc || !toAcc) {
+      return { success: false, message: '找不到對應的轉出或轉入帳戶' };
+    }
+    if (fromAmount <= 0 || toAmount <= 0) {
+      return { success: false, message: '轉帳金額必須大於 0' };
+    }
+    if (fromAcc.type !== 'credit_card' && fromAcc.balance < fromAmount) {
+      const config = getCurrencyConfig(fromAcc.currency || 'TWD');
+      return {
+        success: false,
+        message: `餘額不足！${fromAcc.name} 當前餘額為 ${config.symbol} ${fromAcc.balance.toLocaleString()} ${fromAcc.currency || 'TWD'}`
+      };
+    }
+
+    const nextAccounts = accounts.map(acc => {
+      if (acc.id === fromAccountId) {
+        return { ...acc, balance: acc.balance - fromAmount };
+      }
+      if (acc.id === toAccountId) {
+        return { ...acc, balance: acc.balance + toAmount };
+      }
+      return acc;
+    });
+
+    const rate = fromAmount > 0 ? toAmount / fromAmount : 1;
+
+    const record: AccountTransferRecord = {
+      id: 'tr_' + Date.now(),
+      date: todayStr,
+      fromAccountId,
+      fromAmount,
+      fromCurrency: fromAcc.currency || 'TWD',
+      toAccountId,
+      toAmount,
+      toCurrency: toAcc.currency || 'TWD',
+      exchangeRate: rate,
+      feeTWD,
+      note,
+      createdAt: Date.now()
+    };
+
+    const nextTransfers = [record, ...transfers];
+
+    setAccounts(nextAccounts);
+    setTransfers(nextTransfers);
+
+    syncToFirestore({
+      accounts: nextAccounts,
+      transfers: nextTransfers
+    });
+
+    sound.playSuccess();
+    return { success: true, message: `成功完成外幣兌換與帳戶轉帳！` };
+  };
 
   // XP & Level calculations
   const awardXP = (amount: number, reason: string) => {
@@ -583,18 +745,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let nextCollectibles = collectibles;
 
-    // Update account balances
+    // Update account balances considering account currency
+    const targetAcc = accounts.find(a => a.id === txData.accountId);
+    const accCurr = targetAcc?.currency || 'TWD';
+    const txCurr = txData.originalCurrency || 'TWD';
+
+    let changeInNativeAccCurr = txData.amount; // default TWD
+    if (txData.originalAmount && txCurr === accCurr) {
+      changeInNativeAccCurr = txData.originalAmount;
+    } else if (txData.originalAmount && txData.exchangeRate && accCurr !== 'TWD') {
+      const accRateToTwd = getCurrencyConfig(accCurr).defaultRateToTWD || 1;
+      changeInNativeAccCurr = txData.amount / accRateToTwd;
+    }
+
     const nextAccounts = accounts.map(acc => {
       if (acc.id === txData.accountId) {
         if (acc.type === 'credit_card') {
           return {
             ...acc,
-            balance: txData.type === 'expense' ? acc.balance + txData.amount : Math.max(0, acc.balance - txData.amount)
+            balance: txData.type === 'expense' ? acc.balance + changeInNativeAccCurr : Math.max(0, acc.balance - changeInNativeAccCurr)
           };
         } else {
           return {
             ...acc,
-            balance: txData.type === 'income' ? acc.balance + txData.amount : acc.balance - txData.amount
+            balance: txData.type === 'income' ? acc.balance + changeInNativeAccCurr : acc.balance - changeInNativeAccCurr
           };
         }
       }
@@ -661,17 +835,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!target) return;
 
     // Reverse account impact
+    const targetAcc = accounts.find(a => a.id === target.accountId);
+    const accCurr = targetAcc?.currency || 'TWD';
+    const txCurr = target.originalCurrency || 'TWD';
+
+    let changeInNativeAccCurr = target.amount;
+    if (target.originalAmount && txCurr === accCurr) {
+      changeInNativeAccCurr = target.originalAmount;
+    } else if (target.originalAmount && target.exchangeRate && accCurr !== 'TWD') {
+      const accRateToTwd = getCurrencyConfig(accCurr).defaultRateToTWD || 1;
+      changeInNativeAccCurr = target.amount / accRateToTwd;
+    }
+
     const nextAccounts = accounts.map(acc => {
       if (acc.id === target.accountId) {
         if (acc.type === 'credit_card') {
           return {
             ...acc,
-            balance: target.type === 'expense' ? Math.max(0, acc.balance - target.amount) : acc.balance + target.amount
+            balance: target.type === 'expense' ? Math.max(0, acc.balance - changeInNativeAccCurr) : acc.balance + changeInNativeAccCurr
           };
         } else {
           return {
             ...acc,
-            balance: target.type === 'income' ? acc.balance - target.amount : acc.balance + target.amount
+            balance: target.type === 'income' ? acc.balance - changeInNativeAccCurr : acc.balance + changeInNativeAccCurr
           };
         }
       }
@@ -770,21 +956,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sound.playClick();
   };
 
-  // Fund allocation
-  const allocateConcertFund = (concertId: string, amount: number, note: string = '分配演唱會專款') => {
+  // Multi-Currency Fund allocation
+  const allocateConcertFund = (
+    concertId: string,
+    amount: number,
+    currency: CurrencyCode = 'TWD',
+    accountId?: string,
+    note: string = '分配演唱會專款'
+  ) => {
     if (amount <= 0) {
       return { success: false, message: '分配金額必須大於 0 元' };
     }
-    if (amount > availableUnallocatedFunds) {
+
+    const currConfig = getCurrencyConfig(currency);
+    const twdVal = Math.round(amount * (currConfig.defaultRateToTWD || 1));
+
+    if (twdVal > availableUnallocatedFunds) {
       return {
         success: false,
-        message: `資金不足！目前可用未分配流動資金為 NT$ ${availableUnallocatedFunds.toLocaleString()}，無法分配 NT$ ${amount.toLocaleString()}`
+        message: `資金不足！目前可用未分配流動資金約合 NT$ ${availableUnallocatedFunds.toLocaleString()}，無法分配折合 NT$ ${twdVal.toLocaleString()} 之專款`
       };
     }
 
     const nextConcerts = concerts.map(c => {
       if (c.id === concertId) {
-        const newAllocated = c.allocatedFund + amount;
+        const newAllocated = c.allocatedFund + twdVal;
         const isTargetReached = newAllocated >= c.budgetPlan.total;
         return {
           ...c,
@@ -800,6 +996,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       concertId,
       type: 'allocate',
       amount,
+      currency,
+      twdEquivalent: twdVal,
+      accountId,
       date: todayStr,
       note,
       createdAt: Date.now()
@@ -815,23 +1014,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     sound.playSuccess();
-    return { success: true, message: `成功為目標分配 NT$ ${amount.toLocaleString()} 專款基金！` };
+    return { success: true, message: `成功為目標分配 ${currConfig.symbol} ${amount.toLocaleString()} ${currency} (折合 NT$ ${twdVal.toLocaleString()}) 專款基金！` };
   };
 
-  const withdrawConcertFund = (concertId: string, amount: number, note: string = '提領部分基金') => {
+  const withdrawConcertFund = (
+    concertId: string,
+    amount: number,
+    currency: CurrencyCode = 'TWD',
+    note: string = '提領部分基金'
+  ) => {
     const concert = concerts.find(c => c.id === concertId);
     if (!concert) return { success: false, message: '找不到該演唱會目標' };
     if (amount <= 0) return { success: false, message: '提領金額必須大於 0 元' };
-    if (amount > concert.allocatedFund) {
+
+    const currConfig = getCurrencyConfig(currency);
+    const twdVal = Math.round(amount * (currConfig.defaultRateToTWD || 1));
+
+    if (twdVal > concert.allocatedFund) {
       return {
         success: false,
-        message: `超過可提領額度！此演唱會目前已分配基金僅 NT$ ${concert.allocatedFund.toLocaleString()}`
+        message: `超過可提領額度！此演唱會目前已分配基金折合約 NT$ ${concert.allocatedFund.toLocaleString()}`
       };
     }
 
     const nextConcerts = concerts.map(c => {
       if (c.id === concertId) {
-        const newAllocated = Math.max(0, c.allocatedFund - amount);
+        const newAllocated = Math.max(0, c.allocatedFund - twdVal);
         return {
           ...c,
           allocatedFund: newAllocated,
@@ -846,6 +1054,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       concertId,
       type: 'withdraw',
       amount,
+      currency,
+      twdEquivalent: twdVal,
       date: todayStr,
       note,
       createdAt: Date.now()
@@ -861,7 +1071,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     sound.playCoin();
-    return { success: true, message: `已成功由演唱會基金轉回 NT$ ${amount.toLocaleString()} 至未分配資金池` };
+    return { success: true, message: `已成功由演唱會基金轉回 ${currConfig.symbol} ${amount.toLocaleString()} (折合 NT$ ${twdVal.toLocaleString()}) 至未分配資金池` };
   };
 
   // Concert Tasks
@@ -1031,6 +1241,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        hasEntered,
+        enterApp,
+        exitToCover,
         theme,
         setTheme,
         activeTab,
@@ -1050,6 +1263,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentYearMonth,
         setCurrentYearMonth,
         accounts,
+        transfers,
+        addAccount,
+        updateAccount,
+        deleteAccount,
+        transferCurrency,
         transactions,
         monthlyBudgets,
         concerts,
